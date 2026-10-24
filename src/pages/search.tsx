@@ -35,10 +35,15 @@ import {
 import { consumeDataMutated } from "@/lib/data-version";
 import type { SortOption } from "@/lib/filters";
 import { formatBudget } from "@/lib/format";
-import { getParties } from "@/lib/supabase/queries/get-parties";
 import { getPartyCategories } from "@/lib/supabase/queries/get-party-categories";
 import { getProfile } from "@/lib/supabase/queries/get-profile";
+import {
+  searchParties,
+  type SearchFilters,
+} from "@/lib/supabase/queries/search-parties";
+import { getParties } from "@/lib/supabase/queries/get-parties";
 import type { PartySummary, ProfileSummary } from "@/lib/supabase/queries/types";
+import { createBrowserClient } from "@/lib/supabase/client";
 import { createUserServerClient } from "@/lib/supabase/server";
 import { cn } from "cn";
 import { Info, RotateCcw, Search, Sparkles, X } from "lucide-react";
@@ -61,6 +66,7 @@ export interface SearchProps {
   error: boolean;
   userId?: string;
   parties?: PartySummary[];
+  hasMore?: boolean;
   me?: ProfileSummary | null;
   categories?: string[];
 }
@@ -73,7 +79,7 @@ export const getServerSideProps: GetServerSideProps<SearchProps> = async ({ req,
   if (!user) return { redirect: { destination: "/signin", permanent: false } };
 
   const [parties, me, categories] = await Promise.all([
-    getParties(supabase),
+    searchParties(supabase, {}, user.id, { limit: 20, offset: 0 }),
     getProfile(supabase, user.id),
     getPartyCategories(supabase),
   ]);
@@ -86,7 +92,8 @@ export const getServerSideProps: GetServerSideProps<SearchProps> = async ({ req,
     props: {
       error: false,
       userId: user.id,
-      parties,
+      parties: parties.parties,
+      hasMore: parties.hasMore,
       me,
       categories: (categories ?? []).map((category) => category.name),
     },
@@ -97,6 +104,7 @@ export default function SearchPage({
   error,
   userId = "",
   parties = [],
+  hasMore: initialHasMore = true,
   me = null,
   categories = [],
 }: SearchProps) {
@@ -125,6 +133,126 @@ export default function SearchPage({
   const [filters, setFilters] = React.useState<ManualFilters>({});
   const [sort, setSort] = React.useState<SortOption>("relevance");
   const [filterSheetOpen, setFilterSheetOpen] = React.useState(false);
+  const [results, setResults] = React.useState<PartySummary[]>(parties);
+  const [hasMore, setHasMore] = React.useState(initialHasMore);
+  const [nextOffset, setNextOffset] = React.useState(parties.length);
+  const [textOrder, setTextOrder] = React.useState<string[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [loadingMore, setLoadingMore] = React.useState(false);
+  const [fetchError, setFetchError] = React.useState<string | null>(null);
+  const sentinelRef = React.useRef<HTMLDivElement | null>(null);
+  const isLoadingMoreRef = React.useRef(false);
+  const requestGenerationRef = React.useRef(0);
+
+  const manualKeywordList = React.useMemo(
+    () =>
+      text
+        .toLowerCase()
+        .split(" ")
+        .map((w) => w.trim())
+        .filter(Boolean),
+    [text],
+  );
+
+  const toSearchFilters = React.useCallback(
+    (manual: ManualFilters, searchText: string): SearchFilters => ({
+      category: manual.category,
+      dayWithin: manual.dayWithin,
+      timeOfDay: manual.timeOfDay,
+      budgetMax: manual.budgetMax,
+      minSpots: manual.minSpots,
+      area: manual.area,
+      text: searchText.trim() || undefined,
+    }),
+    [],
+  );
+
+  const isInitialFilters = React.useRef(true);
+
+  const fetchPage = React.useCallback(
+    (offset: number, isAppend: boolean) => {
+      void (async () => {
+        const generation = ++requestGenerationRef.current;
+        if (isAppend) {
+          if (isLoadingMoreRef.current) return;
+          isLoadingMoreRef.current = true;
+          setLoadingMore(true);
+        } else {
+          setLoading(true);
+        }
+        setFetchError(null);
+
+        const supabase = createBrowserClient();
+        const result = await searchParties(
+          supabase,
+          toSearchFilters(filters, text),
+          userId,
+          { limit: 20, offset },
+        );
+
+        if (isAppend) {
+          isLoadingMoreRef.current = false;
+          setLoadingMore(false);
+        } else {
+          setLoading(false);
+        }
+
+        if (!result) {
+          if (generation === requestGenerationRef.current) {
+            setFetchError("Something went wrong. Please try again.");
+          }
+          return;
+        }
+
+        // A newer query superseded this one (e.g. user kept typing); drop the
+        // stale response instead of interleaving pages from different queries.
+        if (generation !== requestGenerationRef.current) return;
+
+        setResults((prev) =>
+          isAppend ? [...prev, ...result.parties] : result.parties,
+        );
+        setTextOrder(result.textOrder ?? []);
+        setHasMore(result.hasMore);
+        setNextOffset(result.nextOffset);
+      })();
+    },
+    [userId, toSearchFilters, filters, text],
+  );
+
+  React.useEffect(() => {
+    if (isInitialFilters.current && !text && Object.keys(filters).length === 0) {
+      isInitialFilters.current = false;
+      return;
+    }
+    isInitialFilters.current = false;
+
+    const timer = window.setTimeout(() => {
+      void fetchPage(0, false);
+    }, 300);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-query on text/filter/sort changes
+  }, [text, filters, sort]);
+
+  React.useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (
+          entries[0]?.isIntersecting &&
+          hasMore &&
+          !isLoadingMoreRef.current &&
+          !loading
+        ) {
+          void fetchPage(nextOffset, true);
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [nextOffset, hasMore, loading, fetchPage]);
 
   // Mode "AI" state
   const [aiQuery, setAiQuery] = React.useState("");
@@ -163,25 +291,21 @@ export default function SearchPage({
 
   /* ------------------------------ mode "All" ------------------------------ */
 
-  const manualKeywordList = React.useMemo(
-    () =>
-      text
-        .toLowerCase()
-        .split(" ")
-        .map((w) => w.trim())
-        .filter(Boolean),
-    [text],
-  );
-
-  const manualResults = React.useMemo(() => {
-    const filtered = applyFilters(
-      parties,
-      { ...filters, text: manualKeywordList.join(" ") || undefined },
-      userId,
-      now,
-    );
-    return sortParties(filtered, sort, undefined);
-  }, [parties, filters, manualKeywordList, sort, userId, now]);
+  // Popularity reorders loaded pages client-side; relevance uses the RPC's
+  // trigram-similarity order when a text search ran, falling back to the
+  // DB's soonest-first order otherwise.
+  const displayResults = React.useMemo(() => {
+    if (sort === "popularity") return sortParties(results, "popularity");
+    if (sort === "relevance" && textOrder.length > 0) {
+      const rank = new Map(textOrder.map((id, index) => [id, index]));
+      return [...results].sort(
+        (a, b) =>
+          (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
+          (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER),
+      );
+    }
+    return results;
+  }, [results, sort, textOrder]);
 
   const activeFilterCount =
     (filters.category?.length ?? 0) +
@@ -299,10 +423,29 @@ export default function SearchPage({
   };
 
   const aiFilters = React.useMemo(() => filtersFromChips(chips), [chips]);
+  const [aiParties, setAiParties] = React.useState<PartySummary[] | null>(null);
+  const [aiLoading, setAiLoading] = React.useState(false);
+  const aiFetched = React.useRef(false);
+
+  React.useEffect(() => {
+    if (mode !== "ai" || aiFetched.current) return;
+    aiFetched.current = true;
+    setAiLoading(true);
+    const supabase = createBrowserClient();
+    void getParties(supabase).then((parties) => {
+      if (parties) {
+        setAiParties(parties);
+      } else {
+        aiFetched.current = false;
+      }
+      setAiLoading(false);
+    });
+  }, [mode]);
+
   const aiResults = React.useMemo(() => {
-    const filtered = applyFilters(parties, aiFilters, userId, now);
+    const filtered = applyFilters(aiParties ?? [], aiFilters, userId, now);
     return rankMatches(filtered, aiFilters, me ?? undefined, now);
-  }, [parties, aiFilters, userId, me, now]);
+  }, [aiParties, aiFilters, userId, me, now]);
 
   const aiRelaxActions: Array<{ label: string; onClick: () => void }> = [];
   for (const chip of chips) {
@@ -367,7 +510,9 @@ export default function SearchPage({
 
               <div className="flex items-center justify-between gap-2">
                 <div aria-live="polite" className="text-sm text-muted-foreground">
-                  {`${manualResults.length} ${manualResults.length === 1 ? "activity" : "activities"}`}
+                  {hasMore
+                    ? `Showing ${results.length}+ activities`
+                    : `${results.length} ${results.length === 1 ? "activity" : "activities"}`}
                 </div>
                 <div className="flex items-center gap-2">
                   <Label htmlFor="sort-select" className="text-xs text-muted-foreground">
@@ -466,14 +611,37 @@ export default function SearchPage({
                 ) : null}
               </div>
 
-              {manualResults.length > 0 ? (
-                <ul className="grid gap-3 sm:grid-cols-2">
-                  {manualResults.map((party) => (
-                    <li key={party.id}>
-                      <PartyCard party={party} className="h-full" />
-                    </li>
-                  ))}
-                </ul>
+              {fetchError ? (
+                <ErrorState
+                  onRetry={() => void fetchPage(0, false)}
+                  body={fetchError}
+                />
+              ) : results.length > 0 ? (
+                <>
+                  <ul className="grid gap-3 sm:grid-cols-2">
+                    {displayResults.map((party) => (
+                      <li key={party.id}>
+                        <PartyCard party={party} className="h-full" />
+                      </li>
+                    ))}
+                  </ul>
+                  {hasMore ? (
+                    <div ref={sentinelRef} aria-hidden="true" className="h-1" />
+                  ) : (
+                    <p className="text-center text-xs text-muted-foreground">
+                      You&apos;ve reached the end
+                    </p>
+                  )}
+                  {loadingMore ? (
+                    <div role="status" className="flex justify-center py-4">
+                      <div className="size-5 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+                    </div>
+                  ) : null}
+                </>
+              ) : loading ? (
+                <div role="status" className="flex justify-center py-8">
+                  <div className="size-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+                </div>
               ) : (
                 <DiscoverEmptyState
                   onReset={hasManualQuery ? resetManual : undefined}
@@ -565,7 +733,11 @@ export default function SearchPage({
                 </div>
               ) : null}
 
-              {aiProcessing ? (
+              {aiLoading ? (
+                <div role="status" className="flex justify-center py-8">
+                  <div className="size-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+                </div>
+              ) : aiProcessing ? (
                 <div
                   role="status"
                   aria-label="Interpreting your request"

@@ -21,7 +21,7 @@ export type Database = {
                   ]
                 },"parties": {
                   Row: {
-                    "approval_required": boolean,"category_id": string | null,"created_at": string,"description": string | null,"estimated_cost": number | null,"id": string,"location": string | null,"location_coordinates": unknown,"location_description": string | null,"max_slots": number | null,"name": string,"organiser_id": string,"taken_slots": number | null,"time_end": string | null,"time_start": string,"updated_at": string
+                    "approval_required": boolean,"category_id": string | null,"created_at": string,"description": string | null,"estimated_cost": number | null,"id": string,"location": string | null,"location_coordinates": unknown,"location_description": string | null,"max_slots": number | null,"name": string,"organiser_id": string,"slots_left": number | null,"taken_slots": number | null,"time_end": string | null,"time_start": string,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
@@ -203,6 +203,9 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
+            "search_party_ids":
+{ Args: { search_text: string; tag_ids?: string[]; min_similarity?: number }; Returns: string[]
+                           },
             "show_limit":
 { Args: Record<PropertyKey, never>; Returns: number
                            },

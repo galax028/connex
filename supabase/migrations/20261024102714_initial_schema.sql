@@ -178,6 +178,12 @@ CREATE TABLE parties (
     approval_required boolean NOT NULL DEFAULT false,
     taken_slots smallint DEFAULT 1 CHECK (taken_slots >= 1),
     max_slots smallint CHECK (max_slots IS NULL OR max_slots >= 2),
+    slots_left smallint GENERATED ALWAYS AS (
+        CASE WHEN max_slots IS NULL
+            THEN NULL
+            ELSE greatest(max_slots - taken_slots, 0)
+        END
+    ) STORED,
     CHECK (time_end IS NULL OR time_start < time_end),
     CHECK (max_slots IS NULL OR taken_slots <= max_slots)
 );
