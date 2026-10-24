@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { createServerClient } from "./server";
+import { createServerClient } from "@/lib/supabase/server";
 
 export async function getServerUser(req: NextApiRequest, res: NextApiResponse) {
   const supabase = createServerClient(req, res);

@@ -1,17 +1,16 @@
-import Link from "next/link";
-import Head from "next/head";
 import * as React from "react";
-import { ChevronRight, Plus, Search } from "lucide-react";
-
+import Head from "next/head";
+import Link from "next/link";
 import { AiBadge } from "@/components/ai-badge";
 import { CategoryIcon } from "@/components/category-chip";
 import { PartyCard } from "@/components/party-card";
 import { EmptyState, LoadingList } from "@/components/state-views";
 import { Button } from "@/components/ui/button";
+import { rankMatches } from "@/lib/ai/interpret";
 import { useApp } from "@/lib/data/store";
 import { CATEGORIES, CATEGORY_LABELS, type Party } from "@/lib/data/types";
 import { isPast } from "@/lib/format";
-import { rankMatches } from "@/lib/ai/interpret";
+import { ChevronRight, Plus, Search } from "lucide-react";
 
 export default function HomePage() {
   const { hydrated, parties, profiles, getProfile, myStatusFor, currentUserId } = useApp();
@@ -25,9 +24,9 @@ export default function HomePage() {
         (party) =>
           !isPast(party.date, party.time, now) &&
           party.creatorId !== currentUserId &&
-          !party.participants.some((p) => p.profileId === currentUserId)
+          !party.participants.some((p) => p.profileId === currentUserId),
       ),
-    [parties, currentUserId, now]
+    [parties, currentUserId, now],
   );
 
   const aiPicks = React.useMemo(() => {
@@ -47,25 +46,26 @@ export default function HomePage() {
         .filter((p) => !p.participants.some((x) => x.profileId === currentUserId))
         .sort(
           (a, b) =>
-            new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime()
+            new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime(),
         )
         .slice(0, 6),
-    [discoverable, currentUserId]
+    [discoverable, currentUserId],
   );
 
   return (
     <>
       <Head>
         <title>CONNEX · Find your crew</title>
-        <meta name="description" content="Turn “I would go if I had someone to go with” into a real plan." />
+        <meta
+          name="description"
+          content="Turn “I would go if I had someone to go with” into a real plan."
+        />
       </Head>
 
       <div className="flex flex-col gap-8">
         <header className="flex flex-col gap-1">
           <p className="text-sm text-muted-foreground">Chulalongkorn University</p>
-          <h1 className="font-heading heading-1 font-semibold tracking-tight">
-            Find your crew
-          </h1>
+          <h1 className="font-heading heading-1 font-semibold tracking-tight">Find your crew</h1>
           <p className="text-sm text-muted-foreground">
             “I would go if I had someone to go with” — never again.
           </p>
@@ -73,7 +73,7 @@ export default function HomePage() {
 
         <Link
           href="/search"
-          className="flex h-11 items-center gap-2.5 rounded-xl border border-input bg-background px-3.5 text-sm text-muted-foreground outline-none transition-colors hover:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 lg:max-w-md"
+          className="flex h-11 items-center gap-2.5 rounded-xl border border-input bg-background px-3.5 text-sm text-muted-foreground transition-colors outline-none hover:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 lg:max-w-md"
         >
           <Search aria-hidden="true" className="size-4" />
           Search activities or describe your plan…
@@ -81,7 +81,10 @@ export default function HomePage() {
 
         <section aria-labelledby="ai-picks-heading" className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-2">
-            <h2 id="ai-picks-heading" className="flex items-center gap-2 font-heading heading-3 font-semibold">
+            <h2
+              id="ai-picks-heading"
+              className="flex items-center gap-2 font-heading heading-3 font-semibold"
+            >
               Picked for you
               <AiBadge />
             </h2>
@@ -93,10 +96,7 @@ export default function HomePage() {
             aiPicks.length > 0 ? (
               <ul className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-2">
                 {aiPicks.map(({ party, reasons }) => (
-                  <li
-                    key={party.id}
-                    className="flex w-[17.5rem] shrink-0 snap-start"
-                  >
+                  <li key={party.id} className="flex w-[17.5rem] shrink-0 snap-start">
                     <PartyCard
                       party={party}
                       getProfile={getProfile}
@@ -138,7 +138,12 @@ export default function HomePage() {
                 <ul className="grid gap-3 sm:grid-cols-2">
                   {upcoming.map((party) => (
                     <li key={party.id}>
-                      <PartyCard party={party} getProfile={getProfile} getMyStatus={myStatusFor} className="h-full" />
+                      <PartyCard
+                        party={party}
+                        getProfile={getProfile}
+                        getMyStatus={myStatusFor}
+                        className="h-full"
+                      />
                     </li>
                   ))}
                 </ul>
@@ -166,12 +171,14 @@ export default function HomePage() {
               </h2>
               <ul className="grid grid-cols-2 gap-2.5">
                 {CATEGORIES.map((category) => {
-                  const count = parties.filter((p: Party) => p.category === category && !isPast(p.date, p.time, now)).length;
+                  const count = parties.filter(
+                    (p: Party) => p.category === category && !isPast(p.date, p.time, now),
+                  ).length;
                   return (
                     <li key={category}>
                       <Link
                         href={`/search?category=${category}`}
-                        className="flex items-center justify-between rounded-xl border bg-card px-3.5 py-3 text-sm outline-none transition-colors hover:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                        className="flex items-center justify-between rounded-xl border bg-card px-3.5 py-3 text-sm transition-colors outline-none hover:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                       >
                         <span className="flex items-center gap-2 font-medium">
                           <CategoryIcon category={category} />
@@ -189,7 +196,10 @@ export default function HomePage() {
               aria-labelledby="create-cta-heading"
               className="flex flex-col gap-2 rounded-xl bg-primary/10 px-5 py-5 ring-1 ring-primary/20"
             >
-              <h2 id="create-cta-heading" className="font-heading heading-3 font-semibold text-primary">
+              <h2
+                id="create-cta-heading"
+                className="font-heading heading-3 font-semibold text-primary"
+              >
                 Nobody planning it yet?
               </h2>
               <p className="text-sm text-foreground/80">

@@ -1,0 +1,38 @@
+[sqruff.core]
+dialect = "postgres"
+templater = "placeholder"
+max_line_length = 100
+warn_unused_ignore = true
+exclude_rules = "LT02"
+
+[sqruff.indentation]
+indented_joins = true
+
+[sqruff.dialect.postgres]
+pg_trgm = true
+
+[sqruff.templater.placeholder]
+param_style = "dollar"
+
+[sqruff.layout.type.statement_terminator]
+spacing_before = "touch:inline"
+line_position = "trailing:attached:strict"
+
+[sqruff.rules.capitalisation.keywords]
+capitalisation_policy = "uppercase"
+
+[sqruff.rules.capitalisation.identifiers]
+capitalisation_policy = "lowercase"
+
+[sqruff.rules.capitalisation.functions]
+capitalisation_policy = "lowercase"
+
+[sqruff.rules.capitalisation.literals]
+capitalisation_policy = "uppercase"
+
+[sqruff.rules.capitalisation.types]
+extended_capitalisation_policy = "lowercase"
+
+
+[sqruff.rules.convention.terminator]
+require_final_semicolon = true

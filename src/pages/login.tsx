@@ -29,7 +29,9 @@ export default function Login() {
         ].join(),
         redirectTo: `${window.location.origin}/api/auth/callback`,
         queryParams: {
+          access_type: "offline",
           hd: "student.chula.ac.th",
+          prompt: "consent",
         },
       },
     });
