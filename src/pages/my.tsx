@@ -49,11 +49,7 @@ export const getServerSideProps: GetServerSideProps<MyActivitiesProps> = async (
 
 type TabKey = "upcoming" | "past";
 
-export default function MyActivitiesPage({
-  error,
-  userId = "",
-  parties = [],
-}: MyActivitiesProps) {
+export default function MyActivitiesPage({ error, userId = "", parties = [] }: MyActivitiesProps) {
   const router = useRouter();
 
   // Back/forward navigation restores cached props — refetch once when another

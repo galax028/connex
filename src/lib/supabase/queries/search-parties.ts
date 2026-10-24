@@ -101,10 +101,7 @@ function buildDayClauses(days: DayWithin[]): string[] {
   return clauses;
 }
 
-function matchesBangkokHour(
-  party: PartySummary,
-  timeOfDay: TimeOfDay,
-): boolean {
+function matchesBangkokHour(party: PartySummary, timeOfDay: TimeOfDay): boolean {
   const hourFmt = new Intl.DateTimeFormat("en-US", {
     timeZone: "Asia/Bangkok",
     hour: "numeric",
@@ -152,10 +149,10 @@ export async function searchParties(
     .order("created_at", { referencedTable: "parties_tags" });
 
   if (text) {
-    const { data: partyIds, error: rpcError } = await supabase.rpc(
-      "search_party_ids",
-      { search_text: text, tag_ids: matchingTagIds },
-    );
+    const { data: partyIds, error: rpcError } = await supabase.rpc("search_party_ids", {
+      search_text: text,
+      tag_ids: matchingTagIds,
+    });
     if (rpcError) {
       console.error("[queries.searchParties]: ", rpcError);
       return null;
@@ -182,9 +179,7 @@ export async function searchParties(
   }
 
   if (filters.budgetMax !== undefined) {
-    query = query.or(
-      `estimated_cost.lte.${filters.budgetMax},estimated_cost.is.null`,
-    );
+    query = query.or(`estimated_cost.lte.${filters.budgetMax},estimated_cost.is.null`);
   }
 
   if (excludedIds.size > 0) {
@@ -231,11 +226,7 @@ async function getMatchingTagIds(
   if (!text) return [];
   // Exact (case-insensitive) tag name match: substring tag matching made
   // catch-all tags like "Other" pollute unrelated searches ("the" ⊂ "Other").
-  const { data, error } = await supabase
-    .from("tags")
-    .select("id")
-    .ilike("name", text)
-    .limit(500);
+  const { data, error } = await supabase.from("tags").select("id").ilike("name", text).limit(500);
   if (error) {
     console.error("[queries.searchParties]: ", error);
     return null;
@@ -248,10 +239,7 @@ async function getCategoryIds(
   names: string[] | undefined,
 ): Promise<string[] | null> {
   if (!names?.length) return [];
-  const { data, error } = await supabase
-    .from("party_categories")
-    .select("id")
-    .in("name", names);
+  const { data, error } = await supabase.from("party_categories").select("id").in("name", names);
   if (error) {
     console.error("[queries.searchParties]: ", error);
     return null;
