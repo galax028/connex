@@ -1,0 +1,588 @@
+import Link from "next/link";
+import Head from "next/head";
+import { useRouter } from "next/router";
+import * as React from "react";
+import { Info, RotateCcw, Search, Sparkles, X } from "lucide-react";
+
+import { FilterSheet, DAY_OPTIONS, TIME_OPTIONS, type ManualFilters } from "@/components/filter-sheet";
+import { PartyCard } from "@/components/party-card";
+import { DiscoverEmptyState, EmptyState, LoadingList } from "@/components/state-views";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useApp } from "@/lib/data/store";
+import {
+  CATEGORIES,
+  CATEGORY_LABELS,
+  type Category,
+  type SortOption,
+} from "@/lib/data/types";
+import {
+  applyFilters,
+  chipLabelFor,
+  filtersFromChips,
+  interpretQuery,
+  rankMatches,
+  sortParties,
+  type InterpretationChip,
+} from "@/lib/ai/interpret";
+import { cn } from "cn";
+import { formatBudget } from "@/lib/format";
+
+const SORT_OPTIONS: Array<{ value: SortOption; label: string }> = [
+  { value: "relevance", label: "Relevance" },
+  { value: "soonest", label: "Soonest first" },
+  { value: "popularity", label: "Most popular" },
+];
+
+const SUGGESTED_PROMPTS = [
+  "ตีแบดพรุ่งนี้เย็น under 200",
+  "Korean food around Ari for 4 people",
+  "movie this week under 250",
+  "gaming night this week under 300",
+  "run tomorrow evening, free",
+];
+
+export default function SearchPage() {
+  const router = useRouter();
+  const { hydrated, parties, getProfile, myStatusFor, profiles, currentUserId } = useApp();
+  const me = profiles.find((p) => p.id === currentUserId);
+  const now = React.useMemo(() => new Date(), []);
+
+  const [mode, setMode] = React.useState<"all" | "ai">("all");
+  const initialized = React.useRef(false);
+
+  // Mode "All" state
+  const [text, setText] = React.useState("");
+  const [filters, setFilters] = React.useState<ManualFilters>({});
+  const [sort, setSort] = React.useState<SortOption>("relevance");
+  const [filterSheetOpen, setFilterSheetOpen] = React.useState(false);
+
+  // Mode "AI" state
+  const [aiQuery, setAiQuery] = React.useState("");
+  const [chips, setChips] = React.useState<InterpretationChip[]>([]);
+  const [aiNotes, setAiNotes] = React.useState<string[]>([]);
+  const [aiProcessing, setAiProcessing] = React.useState(false);
+  const [aiError, setAiError] = React.useState<string | null>(null);
+  const [aiSubmitted, setAiSubmitted] = React.useState<string | null>(null);
+  const processingTimer = React.useRef<number | null>(null);
+
+  React.useEffect(() => {
+    if (!router.isReady || initialized.current) return;
+    initialized.current = true;
+    // One-time init from the URL a link provided (e.g. /search?mode=ai&category=food).
+    /* eslint-disable react-hooks/set-state-in-effect */
+    if (router.query.mode === "ai") setMode("ai");
+    const category = router.query.category;
+    if (typeof category === "string" && (CATEGORIES as readonly string[]).includes(category)) {
+      setFilters((prev) => ({ ...prev, category: category as Category }));
+    }
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [router.isReady, router.query.mode, router.query.category]);
+
+  React.useEffect(() => {
+    return () => {
+      if (processingTimer.current) window.clearTimeout(processingTimer.current);
+    };
+  }, []);
+
+  /* ------------------------------ mode "All" ------------------------------ */
+
+  const manualKeywordList = React.useMemo(
+    () =>
+      text
+        .toLowerCase()
+        .split(" ")
+        .map((w) => w.trim())
+        .filter(Boolean),
+    [text]
+  );
+
+  const manualResults = React.useMemo(() => {
+    if (!hydrated) return [];
+    const filtered = applyFilters(
+      parties,
+      { ...filters, text: manualKeywordList.join(" ") || undefined },
+      now
+    );
+    return sortParties(filtered, sort, undefined);
+  }, [hydrated, parties, filters, manualKeywordList, sort, now]);
+
+  const activeFilterCount = Object.values(filters).filter(Boolean).length;
+  const hasManualQuery = manualKeywordList.length > 0 || activeFilterCount > 0;
+
+  const relaxActions: Array<{ label: string; clear: () => void }> = [];
+  if (filters.budgetMax !== undefined)
+    relaxActions.push({ label: "Any budget", clear: () => setFilters((f) => ({ ...f, budgetMax: undefined })) });
+  if (filters.dayWithin)
+    relaxActions.push({ label: "Any date", clear: () => setFilters((f) => ({ ...f, dayWithin: undefined })) });
+  if (filters.minSpots !== undefined)
+    relaxActions.push({ label: "Any group size", clear: () => setFilters((f) => ({ ...f, minSpots: undefined })) });
+  if (filters.area)
+    relaxActions.push({ label: "Any area", clear: () => setFilters((f) => ({ ...f, area: undefined })) });
+  if (filters.category)
+    relaxActions.push({ label: "All categories", clear: () => setFilters((f) => ({ ...f, category: undefined })) });
+  if (manualKeywordList.length > 0)
+    relaxActions.push({ label: "Clear search text", clear: () => setText("") });
+
+  const resetManual = () => {
+    setFilters({});
+    setText("");
+    setSort("relevance");
+  };
+
+  /* ------------------------------ mode "AI" ------------------------------- */
+
+  const runInterpretation = (rawQuery: string, isRefinement: boolean) => {
+    const trimmed = rawQuery.trim();
+    if (!trimmed) {
+      setAiError("Type what you feel like doing — the prototype needs a sentence to interpret.");
+      return;
+    }
+    setAiError(null);
+    setAiProcessing(true);
+    setAiSubmitted(trimmed);
+    if (processingTimer.current) window.clearTimeout(processingTimer.current);
+    processingTimer.current = window.setTimeout(() => {
+      const interpretation = interpretQuery(trimmed);
+      setChips((prevChips) => {
+        if (!isRefinement || prevChips.length === 0) {
+          setAiNotes(interpretation.notes);
+          return interpretation.chips;
+        }
+        const detectedFields = new Set(interpretation.chips.map((c) => c.field));
+        const kept = prevChips.filter(
+          (chip) =>
+            !detectedFields.has(chip.field) && !(chip.field === "keyword" && interpretation.chips.some((c) => c.field === "keyword"))
+        );
+        const merged = [...kept, ...interpretation.chips];
+        setAiNotes([
+          ...interpretation.notes,
+          `Refined on top of ${kept.length} kept chip${kept.length === 1 ? "" : "s"} from your earlier request.`,
+        ]);
+        return merged;
+      });
+      setAiProcessing(false);
+    }, 900);
+  };
+
+  const removeChip = (chipId: string) =>
+    setChips((prev) => prev.filter((chip) => chip.id !== chipId));
+
+  const cycleChip = (chip: InterpretationChip) => {
+    setChips((prev) =>
+      prev.map((c) => {
+        if (c.id !== chip.id) return c;
+        const options = CYCLE_OPTIONS[chip.field];
+        if (!options) return c;
+        const index = options.indexOf(c.value);
+        const next = options[(index + 1) % options.length];
+        return { ...c, value: next, label: chipLabelFor(chip.field, next) };
+      })
+    );
+  };
+
+  const aiFilters = React.useMemo(() => filtersFromChips(chips), [chips]);
+  const aiResults = React.useMemo(() => {
+    if (!hydrated) return [];
+    const filtered = applyFilters(parties, aiFilters, now);
+    const ranked = rankMatches(filtered, aiFilters, me, now);
+    return ranked;
+  }, [hydrated, parties, aiFilters, me, now]);
+
+  const aiRelaxActions: Array<{ label: string; onClick: () => void }> = [];
+  for (const chip of chips) {
+    if (chip.field === "keyword") continue;
+    aiRelaxActions.push({ label: `Remove “${chip.label}”`, onClick: () => removeChip(chip.id) });
+  }
+
+  return (
+    <>
+      <Head>
+        <title>Search · CONNEX</title>
+      </Head>
+      <div className="flex flex-col gap-4">
+        <header className="flex flex-col gap-1">
+          <h1 className="font-heading text-2xl font-semibold tracking-tight">Find something to do</h1>
+          <p className="text-sm text-muted-foreground">
+            Browse everything, or describe your plan in your own words.
+          </p>
+        </header>
+
+        <Tabs
+          value={mode}
+          onValueChange={(value) => setMode(value === "ai" ? "ai" : "all")}
+        >
+          <TabsList className="w-full" aria-label="Search mode">
+            <TabsTrigger value="all">All activities</TabsTrigger>
+            <TabsTrigger value="ai" className="gap-1.5">
+              <Sparkles aria-hidden="true" className="size-3.5" />
+              AI search
+            </TabsTrigger>
+          </TabsList>
+
+          {/* ------------------------------ MODE: ALL ------------------------------ */}
+          <TabsContent value="all">
+            <div className="flex flex-col gap-3 pt-3">
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Search
+                    aria-hidden="true"
+                    className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                  />
+                  <Input
+                    value={text}
+                    onChange={(event) => setText(event.target.value)}
+                    placeholder="Search title, place, vibe…"
+                    aria-label="Search activities"
+                    className="pl-8"
+                  />
+                </div>
+                <FilterSheet
+                  open={filterSheetOpen}
+                  onOpenChange={setFilterSheetOpen}
+                  filters={filters}
+                  onChange={(patch) => setFilters((f) => ({ ...f, ...patch }))}
+                  onReset={resetManual}
+                />
+              </div>
+
+              <div className="flex items-center justify-between gap-2">
+                <div aria-live="polite" className="text-sm text-muted-foreground">
+                  {hydrated
+                    ? `${manualResults.length} ${manualResults.length === 1 ? "activity" : "activities"}`
+                    : "Loading…"}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="sort-select" className="text-xs text-muted-foreground">
+                    Sort
+                  </Label>
+                  <Select value={sort} onValueChange={(value) => setSort(value as SortOption)}>
+                    <SelectTrigger id="sort-select" size="sm" aria-label="Sort results">
+                      <SelectValue>{SORT_OPTIONS.find((o) => o.value === sort)?.label}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SORT_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {hasManualQuery ? (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {filters.category ? (
+                    <FilterChip
+                      label={CATEGORY_LABELS[filters.category]}
+                      onRemove={() => setFilters((f) => ({ ...f, category: undefined }))}
+                    />
+                  ) : null}
+                  {filters.dayWithin ? (
+                    <FilterChip
+                      label={DAY_OPTIONS.find((o) => o.value === filters.dayWithin)?.label ?? ""}
+                      onRemove={() => setFilters((f) => ({ ...f, dayWithin: undefined }))}
+                    />
+                  ) : null}
+                  {filters.timeOfDay ? (
+                    <FilterChip
+                      label={TIME_OPTIONS.find((o) => o.value === filters.timeOfDay)?.label ?? ""}
+                      onRemove={() => setFilters((f) => ({ ...f, timeOfDay: undefined }))}
+                    />
+                  ) : null}
+                  {filters.budgetMax !== undefined ? (
+                    <FilterChip
+                      label={filters.budgetMax === 0 ? "Free" : `≤ ${formatBudget(filters.budgetMax)}`}
+                      onRemove={() => setFilters((f) => ({ ...f, budgetMax: undefined }))}
+                    />
+                  ) : null}
+                  {filters.area ? (
+                    <FilterChip
+                      label={filters.area}
+                      onRemove={() => setFilters((f) => ({ ...f, area: undefined }))}
+                    />
+                  ) : null}
+                  {filters.minSpots !== undefined ? (
+                    <FilterChip
+                      label={`Room for ${filters.minSpots}+`}
+                      onRemove={() => setFilters((f) => ({ ...f, minSpots: undefined }))}
+                    />
+                  ) : null}
+                  {manualKeywordList.length > 0 ? (
+                    <FilterChip label={`“${text.trim()}”`} onRemove={() => setText("")} />
+                  ) : null}
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 overflow-x-auto pb-1" role="group" aria-label="Quick category filters">
+                  <Button
+                    variant={filters.category ? "outline" : "default"}
+                    size="sm"
+                    onClick={() => setFilters((f) => ({ ...f, category: undefined }))}
+                    disabled={!filters.category}
+                  >
+                    All
+                  </Button>
+                  {CATEGORIES.map((category) => (
+                    <Button
+                      key={category}
+                      variant={filters.category === category ? "default" : "outline"}
+                      size="sm"
+                      onClick={() =>
+                        setFilters((f) => ({
+                          ...f,
+                          category: f.category === category ? undefined : category,
+                        }))
+                      }
+                      className="shrink-0"
+                    >
+                      {CATEGORY_LABELS[category]}
+                    </Button>
+                  ))}
+                </div>
+              )}
+
+              {!hydrated ? (
+                <LoadingList />
+              ) : manualResults.length > 0 ? (
+                <ul className="grid gap-3 sm:grid-cols-2">
+                  {manualResults.map((party) => (
+                    <li key={party.id}>
+                      <PartyCard party={party} getProfile={getProfile} getMyStatus={myStatusFor} className="h-full" />
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <DiscoverEmptyState
+                  onReset={hasManualQuery ? resetManual : undefined}
+                  relaxActions={relaxActions}
+                />
+              )}
+            </div>
+          </TabsContent>
+
+          {/* ------------------------------ MODE: AI ------------------------------ */}
+          <TabsContent value="ai">
+            <div className="flex flex-col gap-3 pt-3">
+              <p className="flex items-start gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                <Info aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+                Prototype: interpretation is simulated by rules in your browser — no AI service is
+                called, and results come only from real (mock) activity data.
+              </p>
+
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  runInterpretation(aiQuery, chips.length > 0 || aiSubmitted !== null);
+                }}
+                className="flex flex-col gap-2"
+              >
+                <label htmlFor="ai-query" className="sr-only">
+                  Describe what you want to do
+                </label>
+                <Input
+                  id="ai-query"
+                  value={aiQuery}
+                  onChange={(event) => setAiQuery(event.target.value)}
+                  placeholder="e.g. ตีแบดพรุ่งนี้เย็น งบไม่เกิน 200"
+                  autoComplete="off"
+                />
+                <div className="flex gap-2">
+                  <Button type="submit" disabled={aiProcessing} className="flex-1">
+                    <Sparkles data-icon="inline-start" aria-hidden="true" />
+                    {aiProcessing ? "Interpreting…" : chips.length > 0 ? "Refine search" : "Interpret my request"}
+                  </Button>
+                  {chips.length > 0 ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setChips([]);
+                        setAiNotes([]);
+                        setAiSubmitted(null);
+                        setAiQuery("");
+                      }}
+                    >
+                      <RotateCcw data-icon="inline-start" aria-hidden="true" />
+                      Clear
+                    </Button>
+                  ) : null}
+                </div>
+              </form>
+
+              {aiError ? (
+                <p role="alert" className="text-sm font-medium text-destructive">
+                  {aiError}
+                </p>
+              ) : null}
+
+              {aiSubmitted === null && chips.length === 0 ? (
+                <div className="flex flex-col gap-2">
+                  <p className="text-sm text-muted-foreground">Try one of these:</p>
+                  <ul className="flex flex-wrap gap-1.5">
+                    {SUGGESTED_PROMPTS.map((prompt) => (
+                      <li key={prompt}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setAiQuery(prompt);
+                            runInterpretation(prompt, false);
+                          }}
+                          className="h-auto py-1.5 text-left whitespace-normal"
+                        >
+                          {prompt}
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {aiProcessing ? (
+                <div role="status" aria-label="Interpreting your request" className="flex flex-col gap-3">
+                  <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Sparkles aria-hidden="true" className="size-4 animate-pulse text-primary" />
+                    Reading your request… (simulated, prototype)
+                  </p>
+                  <LoadingList label="Finding matches…" />
+                </div>
+              ) : chips.length > 0 ? (
+                <>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium">
+                        Interpreted as
+                        <span className="sr-only"> — tap a chip to change it, ✕ to remove</span>:
+                      </p>
+                    </div>
+                    <ul className="flex flex-wrap gap-1.5" aria-label="Interpretation chips">
+                      {chips.map((chip) => (
+                        <li key={chip.id} className="flex">
+                          <span
+                            className={cn(
+                              "flex items-center rounded-l-full border border-r-0 border-border bg-background pl-1",
+                              CYCLE_OPTIONS[chip.field] ? "pr-0" : "pr-2.5"
+                            )}
+                          >
+                            {CYCLE_OPTIONS[chip.field] ? (
+                              <button
+                                type="button"
+                                onClick={() => cycleChip(chip)}
+                                title="Tap to change"
+                                aria-label={`${chip.label} — tap to change value`}
+                                className="rounded-l-full px-2 py-1 text-xs font-medium outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+                              >
+                                {chip.label}
+                              </button>
+                            ) : (
+                              <span className="px-2 py-1 text-xs font-medium">{chip.label}</span>
+                            )}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => removeChip(chip.id)}
+                            aria-label={`Remove filter ${chip.label}`}
+                            className="flex items-center rounded-r-full border border-border bg-background pr-2 outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+                          >
+                            <X aria-hidden="true" className="size-3" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {aiNotes.length > 0 ? (
+                    <ul className="flex flex-col gap-1 text-xs text-muted-foreground">
+                      {aiNotes.map((note, index) => (
+                        <li key={index} className="flex items-start gap-1.5">
+                          <Info aria-hidden="true" className="mt-0.5 size-3 shrink-0" />
+                          {note}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+
+                  <div aria-live="polite" className="text-sm text-muted-foreground">
+                    {aiResults.length} {aiResults.length === 1 ? "match" : "matches"}
+                  </div>
+
+                  {aiResults.length > 0 ? (
+                    <ul className="grid gap-3 sm:grid-cols-2">
+                      {aiResults.map(({ party, reasons }) => (
+                        <li key={party.id}>
+                          <PartyCard
+                            party={party}
+                            getProfile={getProfile}
+                            getMyStatus={myStatusFor}
+                            aiReason={
+                              reasons.length > 0
+                                ? `${reasons[0]}${reasons[1] ? ` · ${reasons[1]}` : ""}`
+                                : undefined
+                            }
+                            className="h-full"
+                          />
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <EmptyState
+                      icon={<Sparkles className="size-8" strokeWidth={1.5} />}
+                      title="No matches for this interpretation"
+                      body="Loosen a chip below, or draft your own plan instead — nothing was quietly relaxed."
+                      actions={
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="flex flex-wrap justify-center gap-1.5">
+                            {aiRelaxActions.map((action) => (
+                              <Button key={action.label} variant="outline" size="sm" onClick={action.onClick}>
+                                {action.label}
+                              </Button>
+                            ))}
+                          </div>
+                          <Button render={<Link href="/create" />}>Draft a plan</Button>
+                        </div>
+                      }
+                    />
+                  )}
+                </>
+              ) : null}
+            </div>
+          </TabsContent>
+        </Tabs>
+      </div>
+    </>
+  );
+}
+
+function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
+  return (
+    <Badge variant="outline" className="gap-1 pr-1">
+      {label}
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={`Remove filter ${label}`}
+        className="rounded-full p-0.5 outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50"
+      >
+        <X aria-hidden="true" className="size-3" />
+      </button>
+    </Badge>
+  );
+}
+
+const CYCLE_OPTIONS: Record<string, string[] | undefined> = {
+  category: Object.keys(CATEGORY_LABELS),
+  dayWithin: DAY_OPTIONS.map((o) => o.value),
+  timeOfDay: TIME_OPTIONS.map((o) => o.value),
+  budgetMax: ["0", "100", "200", "300", "500"],
+};

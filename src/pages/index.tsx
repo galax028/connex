@@ -1,69 +1,208 @@
-import Image from "next/image";
+import Link from "next/link";
+import Head from "next/head";
+import * as React from "react";
+import { ChevronRight, Plus, Search } from "lucide-react";
 
-export default function Home() {
+import { AiBadge } from "@/components/ai-badge";
+import { CategoryIcon } from "@/components/category-chip";
+import { PartyCard } from "@/components/party-card";
+import { EmptyState, LoadingList } from "@/components/state-views";
+import { Button } from "@/components/ui/button";
+import { useApp } from "@/lib/data/store";
+import { CATEGORIES, CATEGORY_LABELS, type Party } from "@/lib/data/types";
+import { isPast } from "@/lib/format";
+import { rankMatches } from "@/lib/ai/interpret";
+
+export default function HomePage() {
+  const { hydrated, parties, profiles, getProfile, myStatusFor, currentUserId } = useApp();
+  const me = profiles.find((p) => p.id === currentUserId);
+
+  const now = React.useMemo(() => new Date(), []);
+
+  const discoverable = React.useMemo(
+    () =>
+      parties.filter(
+        (party) =>
+          !isPast(party.date, party.time, now) &&
+          party.creatorId !== currentUserId &&
+          !party.participants.some((p) => p.profileId === currentUserId)
+      ),
+    [parties, currentUserId, now]
+  );
+
+  const aiPicks = React.useMemo(() => {
+    if (!hydrated) return [];
+    return rankMatches(discoverable, {}, me, now)
+      .filter((r) => {
+        const accepted = r.party.participants.filter((p) => p.status === "accepted").length;
+        return r.party.capacity === null || accepted < r.party.capacity;
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5);
+  }, [discoverable, me, hydrated, now]);
+
+  const upcoming = React.useMemo(
+    () =>
+      discoverable
+        .filter((p) => !p.participants.some((x) => x.profileId === currentUserId))
+        .sort(
+          (a, b) =>
+            new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime()
+        )
+        .slice(0, 6),
+    [discoverable, currentUserId]
+  );
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between bg-white px-16 py-32 sm:items-start dark:bg-black">
-        <Image
-          className="h-5 w-[100px] dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl leading-10 font-semibold tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/6 px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/8">
-              index.tsx
-            </code>{" "}
-            file.
+    <>
+      <Head>
+        <title>CONNEX · Find your crew</title>
+        <meta name="description" content="Turn “I would go if I had someone to go with” into a real plan." />
+      </Head>
+
+      <div className="flex flex-col gap-8">
+        <header className="flex flex-col gap-1">
+          <p className="text-sm text-muted-foreground">Chulalongkorn University</p>
+          <h1 className="font-heading text-2xl font-semibold tracking-tight">
+            Find your crew
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p className="text-sm text-muted-foreground">
+            “I would go if I had someone to go with” — never again.
           </p>
+        </header>
+
+        <Link
+          href="/search"
+          className="flex h-11 items-center gap-2.5 rounded-xl border border-input bg-background px-3.5 text-sm text-muted-foreground outline-none transition-colors hover:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 lg:max-w-md"
+        >
+          <Search aria-hidden="true" className="size-4" />
+          Search activities or describe your plan…
+        </Link>
+
+        <section aria-labelledby="ai-picks-heading" className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-2">
+            <h2 id="ai-picks-heading" className="flex items-center gap-2 font-heading text-lg font-semibold">
+              Picked for you
+              <AiBadge />
+            </h2>
+            <Button variant="ghost" size="sm" render={<Link href="/search?mode=ai" />}>
+              Ask AI <ChevronRight aria-hidden="true" />
+            </Button>
+          </div>
+          {hydrated ? (
+            aiPicks.length > 0 ? (
+              <ul className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-2">
+                {aiPicks.map(({ party, reasons }) => (
+                  <li
+                    key={party.id}
+                    className="flex w-[17.5rem] shrink-0 snap-start"
+                  >
+                    <PartyCard
+                      party={party}
+                      getProfile={getProfile}
+                      getMyStatus={myStatusFor}
+                      aiReason={reasons[0]}
+                      className="h-full"
+                    />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <EmptyState
+                title="No recommendations yet"
+                body="Add interests to your profile so suggestions can be based on what you like."
+                actions={
+                  <Button variant="outline" render={<Link href="/profile" />}>
+                    Edit interests
+                  </Button>
+                }
+              />
+            )
+          ) : (
+            <LoadingList />
+          )}
+        </section>
+
+        <div className="flex flex-col gap-8 lg:grid lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start lg:gap-10">
+          <section aria-labelledby="upcoming-heading" className="flex min-w-0 flex-col gap-3">
+            <div className="flex items-center justify-between gap-2">
+              <h2 id="upcoming-heading" className="font-heading text-lg font-semibold">
+                Happening soon
+              </h2>
+              <Button variant="ghost" size="sm" render={<Link href="/search" />}>
+                Browse all <ChevronRight aria-hidden="true" />
+              </Button>
+            </div>
+            {hydrated ? (
+              upcoming.length > 0 ? (
+                <ul className="grid gap-3 sm:grid-cols-2">
+                  {upcoming.map((party) => (
+                    <li key={party.id}>
+                      <PartyCard party={party} getProfile={getProfile} getMyStatus={myStatusFor} className="h-full" />
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <EmptyState
+                  title="Nothing upcoming yet"
+                  body="Be the one who gets the group together."
+                  actions={
+                    <Button render={<Link href="/create" />}>
+                      <Plus data-icon="inline-start" aria-hidden="true" />
+                      Start a plan
+                    </Button>
+                  }
+                />
+              )
+            ) : (
+              <LoadingList />
+            )}
+          </section>
+
+          <div className="flex flex-col gap-8 lg:sticky lg:top-6">
+            <section aria-labelledby="categories-heading" className="flex flex-col gap-3">
+              <h2 id="categories-heading" className="font-heading text-lg font-semibold">
+                Browse by category
+              </h2>
+              <ul className="grid grid-cols-2 gap-2.5">
+                {CATEGORIES.map((category) => {
+                  const count = parties.filter((p: Party) => p.category === category && !isPast(p.date, p.time, now)).length;
+                  return (
+                    <li key={category}>
+                      <Link
+                        href={`/search?category=${category}`}
+                        className="flex items-center justify-between rounded-xl border bg-card px-3.5 py-3 text-sm outline-none transition-colors hover:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                      >
+                        <span className="flex items-center gap-2 font-medium">
+                          <CategoryIcon category={category} />
+                          {CATEGORY_LABELS[category]}
+                        </span>
+                        <span className="text-xs text-muted-foreground">{count}</span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+
+            <section
+              aria-labelledby="create-cta-heading"
+              className="flex flex-col gap-2 rounded-xl bg-primary/10 px-5 py-5 ring-1 ring-primary/20"
+            >
+              <h2 id="create-cta-heading" className="font-heading text-lg font-semibold text-primary">
+                Nobody planning it yet?
+              </h2>
+              <p className="text-sm text-foreground/80">
+                Post your own plan — badminton, study group, food run — and let people find you.
+              </p>
+              <Button className="mt-1 self-start" render={<Link href="/create" />}>
+                <Plus data-icon="inline-start" aria-hidden="true" />
+                Start a plan
+              </Button>
+            </section>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] md:w-[158px] dark:hover:bg-[#ccc]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="h-[14px] w-4 dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/8 px-5 transition-colors hover:border-transparent hover:bg-black/4 md:w-[158px] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
-            href="https://nextjs.org/docs/pages/getting-started?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+      </div>
+    </>
   );
 }
