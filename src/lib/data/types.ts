@@ -41,6 +41,12 @@ export interface Profile {
   color: string;
 }
 
+/** Exact geographic spot chosen on a map (WGS 84 decimal degrees). */
+export interface MapPin {
+  lat: number;
+  lng: number;
+}
+
 export interface Party {
   id: string;
   title: string;
@@ -52,6 +58,8 @@ export interface Party {
   endTime?: string;
   location: string;
   area: string;
+  /** Optional exact meeting spot dropped on a map by the host. */
+  locationPin?: MapPin;
   budgetPerPerson: number;
   /** Max confirmed members including the host. null = unlimited. */
   capacity: number | null;

@@ -79,90 +79,87 @@ export default function HomePage() {
           Search activities or describe your plan…
         </Link>
 
-        <section aria-labelledby="ai-picks-heading" className="flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-2">
-            <h2
-              id="ai-picks-heading"
-              className="flex items-center gap-2 font-heading heading-3 font-semibold"
-            >
-              Picked for you
-              <AiBadge />
-            </h2>
-            <Button variant="ghost" size="sm" render={<Link href="/search?mode=ai" />}>
-              Ask AI <ChevronRight aria-hidden="true" />
-            </Button>
-          </div>
-          {hydrated ? (
-            aiPicks.length > 0 ? (
-              <ul className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-2">
-                {aiPicks.map(({ party, reasons }) => (
-                  <li key={party.id} className="flex w-[17.5rem] shrink-0 snap-start">
-                    <PartyCard
-                      party={party}
-                      getProfile={getProfile}
-                      getMyStatus={myStatusFor}
-                      aiReason={reasons[0]}
-                      className="h-full"
-                    />
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <EmptyState
-                title="No recommendations yet"
-                body="Add interests to your profile so suggestions can be based on what you like."
-                actions={
-                  <Button variant="outline" render={<Link href="/profile" />}>
-                    Edit interests
-                  </Button>
-                }
-              />
-            )
-          ) : (
-            <LoadingList />
-          )}
-        </section>
-
         <div className="flex flex-col gap-8 lg:grid lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start lg:gap-10">
-          <section aria-labelledby="upcoming-heading" className="flex min-w-0 flex-col gap-3">
-            <div className="flex items-center justify-between gap-2">
-              <h2 id="upcoming-heading" className="font-heading heading-3 font-semibold">
-                Happening soon
-              </h2>
-              <Button variant="ghost" size="sm" render={<Link href="/search" />}>
-                Browse all <ChevronRight aria-hidden="true" />
-              </Button>
-            </div>
-            {hydrated ? (
-              upcoming.length > 0 ? (
-                <ul className="grid gap-3 sm:grid-cols-2">
-                  {upcoming.map((party) => (
-                    <li key={party.id}>
-                      <PartyCard
-                        party={party}
-                        getProfile={getProfile}
-                        getMyStatus={myStatusFor}
-                        className="h-full"
-                      />
-                    </li>
-                  ))}
-                </ul>
+          <div className="flex min-w-0 flex-col gap-8">
+            <section aria-labelledby="ai-picks-heading" className="flex flex-col gap-3">
+              <div className="flex items-center justify-between gap-2">
+                <h2 id="ai-picks-heading" className="flex items-center gap-2 font-heading heading-3 font-semibold">
+                  Picked for you
+                  <AiBadge />
+                </h2>
+                <Button variant="ghost" size="sm" render={<Link href="/search?mode=ai" />}>
+                  Ask AI <ChevronRight aria-hidden="true" />
+                </Button>
+              </div>
+              {hydrated ? (
+                aiPicks.length > 0 ? (
+                  <ul className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-2">
+                    {aiPicks.map(({ party, reasons }) => (
+                      <li
+                        key={party.id}
+                        className="flex w-[17.5rem] shrink-0 snap-start"
+                      >
+                        <PartyCard
+                          party={party}
+                          getProfile={getProfile}
+                          getMyStatus={myStatusFor}
+                          aiReason={reasons[0]}
+                          className="h-full"
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <EmptyState
+                    title="No recommendations yet"
+                    body="Add interests to your profile so suggestions can be based on what you like."
+                    actions={
+                      <Button variant="outline" render={<Link href="/profile" />}>
+                        Edit interests
+                      </Button>
+                    }
+                  />
+                )
               ) : (
-                <EmptyState
-                  title="Nothing upcoming yet"
-                  body="Be the one who gets the group together."
-                  actions={
-                    <Button render={<Link href="/create" />}>
-                      <Plus data-icon="inline-start" aria-hidden="true" />
-                      Start a plan
-                    </Button>
-                  }
-                />
-              )
-            ) : (
-              <LoadingList />
-            )}
-          </section>
+                <LoadingList />
+              )}
+            </section>
+
+            <section aria-labelledby="upcoming-heading" className="flex flex-col gap-3">
+              <div className="flex items-center justify-between gap-2">
+                <h2 id="upcoming-heading" className="font-heading heading-3 font-semibold">
+                  Happening soon
+                </h2>
+                <Button variant="ghost" size="sm" render={<Link href="/search" />}>
+                  Browse all <ChevronRight aria-hidden="true" />
+                </Button>
+              </div>
+              {hydrated ? (
+                upcoming.length > 0 ? (
+                  <ul className="grid gap-3 sm:grid-cols-2">
+                    {upcoming.map((party) => (
+                      <li key={party.id}>
+                        <PartyCard party={party} getProfile={getProfile} getMyStatus={myStatusFor} className="h-full" />
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <EmptyState
+                    title="Nothing upcoming yet"
+                    body="Be the one who gets the group together."
+                    actions={
+                      <Button render={<Link href="/create" />}>
+                        <Plus data-icon="inline-start" aria-hidden="true" />
+                        Start a plan
+                      </Button>
+                    }
+                  />
+                )
+              ) : (
+                <LoadingList />
+              )}
+            </section>
+          </div>
 
           <div className="flex flex-col gap-8 lg:sticky lg:top-6">
             <section aria-labelledby="categories-heading" className="flex flex-col gap-3">

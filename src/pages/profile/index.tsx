@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Head from "next/head";
 import * as React from "react";
-import { Check, Eye, EyeOff, MessageCircle, Pencil, Plus, Settings2, X } from "lucide-react";
+import { Check, Eye, EyeOff, Pencil, Plus, Settings2, X } from "lucide-react";
 
 import { ParticipantAvatar } from "@/components/participant-avatar";
 import { Badge } from "@/components/ui/badge";
@@ -344,12 +344,6 @@ export default function MyProfilePage() {
                             {isPast(party.date, party.time, now) ? "Past" : "Upcoming"}
                           </span>
                         </div>
-                        {party.creatorId === currentUserId || myStatusFor(party) === "joined" ? (
-                          <MessageCircle
-                            aria-hidden="true"
-                            className="size-4 shrink-0 text-muted-foreground"
-                          />
-                        ) : null}
                       </Link>
                     </li>
                   ))}

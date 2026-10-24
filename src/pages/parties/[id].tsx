@@ -1,4 +1,5 @@
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import Head from "next/head";
 import { useRouter } from "next/router";
 import * as React from "react";
@@ -38,6 +39,14 @@ import { CREATED_PARTY_FLAG, useApp } from "@/lib/data/store";
 import type { Party } from "@/lib/data/types";
 import { formatBudgetPerPerson, formatTime, formatWhen, isPast } from "@/lib/format";
 import { cn } from "cn";
+
+const MapPinPreview = dynamic(
+  () => import("@/components/map-pin-picker").then((m) => m.MapPinPreview),
+  {
+    ssr: false,
+    loading: () => <div className="h-40 w-full rounded-xl border bg-muted" />,
+  }
+);
 
 function asId(param: string | string[] | undefined): string | undefined {
   return Array.isArray(param) ? param[0] : param;
@@ -216,6 +225,14 @@ function PartyDetailsView({ party }: { party: Party }) {
                   label="Where"
                   value={`${party.location} · ${party.area}`}
                 />
+                {party.locationPin ? (
+                  <div className="flex flex-col gap-1.5 pt-1">
+                    <MapPinPreview pin={party.locationPin} />
+                    <p className="text-xs text-muted-foreground">
+                      Exact spot pinned by the host.
+                    </p>
+                  </div>
+                ) : null}
                 <DetailRow
                   icon={<Banknote aria-hidden="true" />}
                   label="Est. cost"
@@ -559,7 +576,7 @@ function JoinPanel({
         {status === "creator" ? (
           <>
             <p className="text-sm text-muted-foreground">
-              You’re hosting this plan. Manage join requests above and coordinate in the chat.
+              You’re hosting this plan. Manage join requests under ’crew’ section and coordinate in the chat.
             </p>
             <div className="flex flex-wrap gap-2">
               <Button render={<Link href={chatHref} />}>

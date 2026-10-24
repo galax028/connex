@@ -1,14 +1,15 @@
+import * as React from "react";
+import dynamic from "next/dynamic";
 import Head from "next/head";
 import { useRouter } from "next/router";
-import * as React from "react";
-import { ArrowLeft, CalendarPlus, Eye } from "lucide-react";
-
-import { Button } from "@/components/ui/button";
+import { PartyCard } from "@/components/party-card";
+import { ErrorState } from "@/components/state-views";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -16,16 +17,55 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ErrorState } from "@/components/state-views";
-import { PartyCard } from "@/components/party-card";
-import { CREATED_PARTY_FLAG, useApp } from "@/lib/data/store";
-import { CATEGORIES, CATEGORY_LABELS, type Category, type Party } from "@/lib/data/types";
+import { Textarea } from "@/components/ui/textarea";
 import { INTEREST_TAGS } from "@/lib/api/interests";
-import { cn } from "cn";
+import { CREATED_PARTY_FLAG, useApp } from "@/lib/data/store";
+import {
+  CATEGORIES,
+  CATEGORY_LABELS,
+  type Category,
+  type MapPin,
+  type Party,
+} from "@/lib/data/types";
 import { combineDateTime, daysFromToday } from "@/lib/format";
+import { cn } from "cn";
+import { ArrowLeft, CalendarPlus, Eye } from "lucide-react";
+
+const MapPinPicker = dynamic(
+  () => import("@/components/map-pin-picker").then((m) => m.MapPinPicker),
+  {
+    ssr: false,
+    loading: () => <div className="h-56 w-full rounded-xl border bg-muted sm:h-64" />,
+  },
+);
 
 type CostMode = "free" | "paid";
 type CrewMode = "limited" | "unlimited";
+
+const MEETING_OTHER = "other";
+
+const MEETING_PRESETS = [
+  "On campus",
+  "Sam Yan",
+  "Siam",
+  "Ari",
+  "Silom",
+  "Sukhumvit",
+  "Chatuchak",
+  "Phra Nakhon",
+];
+
+/** Rough map centers for the meeting presets, used to open the pin map nearby. */
+const PRESET_COORDS: Record<string, MapPin> = {
+  "On campus": { lat: 13.7345, lng: 100.5303 },
+  "Sam Yan": { lat: 13.7266, lng: 100.528 },
+  "Siam": { lat: 13.7465, lng: 100.5345 },
+  "Ari": { lat: 13.7773, lng: 100.543 },
+  "Silom": { lat: 13.7234, lng: 100.532 },
+  "Sukhumvit": { lat: 13.7367, lng: 100.5603 },
+  "Chatuchak": { lat: 13.7999, lng: 100.5501 },
+  "Phra Nakhon": { lat: 13.754, lng: 100.499 },
+};
 
 interface FormState {
   title: string;
@@ -34,7 +74,10 @@ interface FormState {
   date: string;
   time: string;
   endTime: string;
+  locationPreset: string;
   location: string;
+  pinOnMap: boolean;
+  mapPin: MapPin | null;
   costMode: CostMode;
   budget: string;
   crewMode: CrewMode;
@@ -50,7 +93,10 @@ const EMPTY_FORM: FormState = {
   date: "",
   time: "",
   endTime: "",
+  locationPreset: "",
   location: "",
+  pinOnMap: false,
+  mapPin: null,
   costMode: "free",
   budget: "",
   crewMode: "unlimited",
@@ -73,7 +119,12 @@ function validate(form: FormState): FormErrors {
     else if (when.getTime() < Date.now() - 60_000)
       errors.date = "Pick a time in the future — this plan should still happen.";
   }
-  if (!form.location.trim()) errors.location = "Where should the crew meet?";
+  const location =
+    form.locationPreset === MEETING_OTHER ? form.location.trim() : form.locationPreset;
+  if (!location) {
+    if (!form.locationPreset) errors.locationPreset = "Pick a meeting point.";
+    else errors.location = "Describe the meeting point.";
+  }
   if (form.endTime) {
     if (form.time && form.date) {
       const start = combineDateTime(form.date, form.time);
@@ -145,7 +196,7 @@ export default function CreatePartyPage() {
     const nextErrors = validate(form);
     setErrors(nextErrors);
     const firstError = (Object.keys(nextErrors) as Array<keyof FormErrors>).find(
-      (key) => nextErrors[key]
+      (key) => nextErrors[key],
     );
     if (firstError) {
       setSummaryError("Check the highlighted fields — nothing was published yet.");
@@ -159,8 +210,9 @@ export default function CreatePartyPage() {
       date: form.date,
       time: form.time,
       endTime: form.endTime || undefined,
-      location: form.location.trim(),
-      area: inferArea(form.location),
+      location: form.locationPreset === MEETING_OTHER ? form.location.trim() : form.locationPreset,
+      area: form.locationPreset === MEETING_OTHER ? inferArea(form.location) : form.locationPreset,
+      locationPin: form.pinOnMap && form.mapPin ? form.mapPin : undefined,
       budgetPerPerson: form.costMode === "free" ? 0 : Number(form.budget),
       capacity: form.crewMode === "unlimited" ? null : Number(form.capacity),
       requiresApproval: form.requiresApproval,
@@ -174,6 +226,14 @@ export default function CreatePartyPage() {
     router.push(`/parties/${party.id}`);
   };
 
+  const resolvedLocation =
+    form.locationPreset === MEETING_OTHER ? form.location.trim() : form.locationPreset;
+
+  const mapCenter =
+    PRESET_COORDS[
+      form.locationPreset === MEETING_OTHER ? inferArea(form.location) : form.locationPreset
+    ];
+
   const previewParty: Party = React.useMemo(
     () => ({
       id: "preview",
@@ -182,8 +242,11 @@ export default function CreatePartyPage() {
       category: (form.category || "other") as Category,
       date: form.date || daysFromToday(1),
       time: form.time || "18:00",
-      location: form.location.trim() || "Meeting point",
-      area: inferArea(form.location || "Meeting point"),
+      location: resolvedLocation || "Meeting point",
+      area:
+        form.locationPreset === MEETING_OTHER
+          ? inferArea(form.location)
+          : form.locationPreset || "Elsewhere",
       budgetPerPerson: form.costMode === "paid" ? Number(form.budget) || 0 : 0,
       capacity:
         form.crewMode === "limited" && Number.isInteger(Number(form.capacity))
@@ -197,7 +260,7 @@ export default function CreatePartyPage() {
       interests: form.interests,
       createdAt: new Date().toISOString(),
     }),
-    [form, currentUserId]
+    [form, resolvedLocation, currentUserId],
   );
 
   return (
@@ -222,7 +285,11 @@ export default function CreatePartyPage() {
 
         {summaryError ? <ErrorState title={summaryError} /> : null}
 
-        <form onSubmit={onSubmit} noValidate className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start lg:gap-8">
+        <form
+          onSubmit={onSubmit}
+          noValidate
+          className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start lg:gap-8"
+        >
           <div className="flex min-w-0 flex-col gap-6">
             <Card size="sm">
               <CardHeader>
@@ -264,7 +331,12 @@ export default function CreatePartyPage() {
                   </Select>
                 </Field>
 
-                <Field label="Description" error={undefined} id="field-description" hint="Optional, but a sentence helps people decide.">
+                <Field
+                  label="Description"
+                  error={undefined}
+                  id="field-description"
+                  hint="Optional, but a sentence helps people decide."
+                >
                   <Textarea
                     id="field-description"
                     value={form.description}
@@ -310,18 +382,85 @@ export default function CreatePartyPage() {
                     aria-invalid={!!errors.endTime}
                   />
                 </Field>
-                <Field label="Meeting point" error={errors.location} id="field-location" className="col-span-2" hint="The approximate area is picked up from this automatically.">
-                  <Input
+                <Field
+                  label="Meeting point"
+                  error={errors.locationPreset}
+                  id="field-locationPreset"
+                  className="col-span-2"
+                >
+                  <Select
+                    value={form.locationPreset === "" ? null : form.locationPreset}
+                    onValueChange={(value) => {
+                      set("locationPreset", value ?? "");
+                      if (value !== MEETING_OTHER) set("location", "");
+                    }}
+                  >
+                    <SelectTrigger
+                      id="field-locationPreset"
+                      className="w-full"
+                      aria-invalid={!!errors.locationPreset}
+                    >
+                      <SelectValue>
+                        {form.locationPreset === MEETING_OTHER
+                          ? "Other — describe below"
+                          : form.locationPreset || "Pick a meeting point"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MEETING_PRESETS.map((preset) => (
+                        <SelectItem key={preset} value={preset}>
+                          {preset}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value={MEETING_OTHER}>Other (type below)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                {form.locationPreset === MEETING_OTHER ? (
+                  <Field
+                    label="Describe the meeting point"
+                    error={errors.location}
                     id="field-location"
-                    value={form.location}
-                    onChange={(e) => set("location", e.target.value)}
-                    placeholder="e.g. CU Sport Complex, Court 3"
-                    aria-invalid={!!errors.location}
+                    className="col-span-2"
+                    hint="The approximate area is picked up from this automatically."
+                  >
+                    <Input
+                      id="field-location"
+                      value={form.location}
+                      onChange={(e) => set("location", e.target.value)}
+                      placeholder="e.g. CU Sport Complex, Court 3"
+                      aria-invalid={!!errors.location}
                     maxLength={120}
                   />
                 </Field>
-              </CardContent>
-            </Card>
+              ) : null}
+              <div className="col-span-2 flex flex-col gap-2">
+                <Label htmlFor="field-pinOnMap" className="cursor-pointer">
+                  <Checkbox
+                    id="field-pinOnMap"
+                    checked={form.pinOnMap}
+                    onCheckedChange={(checked) => {
+                      set("pinOnMap", checked);
+                      if (!checked) set("mapPin", null);
+                    }}
+                  />
+                  Pinpoint the exact spot on a map (optional)
+                </Label>
+                {form.pinOnMap ? (
+                  <MapPinPicker
+                    value={form.mapPin}
+                    onChange={(pin) => set("mapPin", pin)}
+                    center={mapCenter}
+                  />
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Opens a small map you can drag until the center pin sits on the exact spot —
+                    otherwise the crew just sees the meeting point above.
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
             <Card size="sm">
               <CardHeader>
@@ -440,14 +579,14 @@ export default function CreatePartyPage() {
                             "interests",
                             active
                               ? form.interests.filter((i) => i !== interest)
-                              : [...form.interests, interest]
+                              : [...form.interests, interest],
                           )
                         }
                         className={cn(
-                          "rounded-full border px-2.5 py-1 text-xs outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50",
+                          "rounded-full border px-2.5 py-1 text-xs transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
                           active
                             ? "border-transparent bg-primary text-primary-foreground"
-                            : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+                            : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground",
                         )}
                       >
                         {interest}
@@ -466,17 +605,15 @@ export default function CreatePartyPage() {
                 Live preview
               </p>
               <p className="text-xs text-muted-foreground">
-                How your card appears to other students — it updates as you fill the form.
-                This preview isn’t clickable.
+                How your card appears to other students — it updates as you fill the form. This
+                preview isn’t clickable.
               </p>
-              <div className="rounded-xl bg-muted p-3">
-                <PartyCard
-                  party={previewParty}
-                  getProfile={getProfile}
-                  getMyStatus={myStatusFor}
-                  nonInteractive
-                />
-              </div>
+              <PartyCard
+                party={previewParty}
+                getProfile={getProfile}
+                getMyStatus={myStatusFor}
+                nonInteractive
+              />
               <Badge variant="outline" className="self-start">
                 {form.requiresApproval ? "Host approves requests" : "Instant join"}
               </Badge>
@@ -555,10 +692,10 @@ function SegmentedControl<T extends string>({
             aria-checked={active}
             onClick={() => onChange(option.value)}
             className={cn(
-              "flex-1 rounded-md px-2 py-1.5 text-sm font-medium whitespace-nowrap outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50",
+              "flex-1 rounded-md px-2 py-1.5 text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
               active
                 ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
+                : "text-muted-foreground hover:text-foreground",
             )}
           >
             {option.label}

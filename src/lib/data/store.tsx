@@ -50,6 +50,7 @@ export interface CreatePartyInput {
   endTime?: string;
   location: string;
   area: string;
+  locationPin?: Party["locationPin"];
   budgetPerPerson: number;
   capacity: number | null;
   requiresApproval: boolean;
@@ -127,6 +128,13 @@ function normalizeCreatedParty(value: unknown): Party | null {
     time: party.time,
     location: typeof party.location === "string" ? party.location : "",
     area: typeof party.area === "string" ? party.area : "On campus",
+    locationPin:
+      typeof party.locationPin?.lat === "number" &&
+      Number.isFinite(party.locationPin.lat) &&
+      typeof party.locationPin?.lng === "number" &&
+      Number.isFinite(party.locationPin.lng)
+        ? { lat: party.locationPin.lat, lng: party.locationPin.lng }
+        : undefined,
     budgetPerPerson:
       typeof party.budgetPerPerson === "number" && Number.isFinite(party.budgetPerPerson)
         ? party.budgetPerPerson
