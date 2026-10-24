@@ -1,5 +1,9 @@
 import type { AppProps } from "next/app";
 import { Inter, Lora, Ubuntu_Mono } from "next/font/google";
+
+import { AppShell } from "@/components/app-shell";
+import { AppStoreProvider } from "@/lib/data/store";
+
 import "@/styles/globals.css";
 
 const fontSans = Inter({
@@ -20,9 +24,13 @@ const fontMono = Ubuntu_Mono({
 
 export default function App({ Component, pageProps }: AppProps) {
   return (
-    <Component
-      className={`${fontSans.variable} ${fontSerif.variable} ${fontMono.variable} antialiased`}
-      {...pageProps}
-    />
+    <AppStoreProvider>
+      <AppShell>
+        <Component
+          className={`${fontSans.variable} ${fontSerif.variable} ${fontMono.variable} antialiased`}
+          {...pageProps}
+        />
+      </AppShell>
+    </AppStoreProvider>
   );
 }
