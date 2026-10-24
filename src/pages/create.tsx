@@ -21,6 +21,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { inferArea } from "@/lib/areas";
 import { CREATED_PARTY_FLAG } from "@/lib/created-party";
+import { markDataMutated } from "@/lib/data-version";
 import type { MapPin } from "@/lib/filters";
 import { daysFromToday, toBangkokIso } from "@/lib/format";
 import { createBrowserClient } from "@/lib/supabase/client";
@@ -295,6 +296,7 @@ export default function CreatePartyPage({
       } catch {
         // storage unavailable — the details page simply skips the toast
       }
+      markDataMutated();
       router.push(`/parties/${partyId}`);
     } finally {
       setSubmitting(false);

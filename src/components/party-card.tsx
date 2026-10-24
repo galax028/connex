@@ -120,7 +120,7 @@ export function PartyCard({
                 full ? "font-medium text-foreground" : "text-muted-foreground",
               )}
             >
-              {participantCountLabel(party.participants, party.maxSlots)}
+              {participantCountLabel(party.takenSlots, party.maxSlots)}
             </span>
           </div>
         </div>

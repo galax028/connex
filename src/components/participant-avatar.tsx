@@ -106,12 +106,11 @@ export function ParticipantStack({
 }
 
 export function participantCountLabel(
-  participants: PartyParticipant[],
+  takenSlots: number,
   maxSlots: number | null,
 ): string {
-  const approved = participants.filter((p) => p.status === "approved").length;
-  if (maxSlots === null) return `${approved} going · open group`;
-  const left = Math.max(0, maxSlots - approved);
-  if (left === 0) return `Full · ${approved}/${maxSlots}`;
-  return `${approved}/${maxSlots} · ${left} ${left === 1 ? "spot" : "spots"} left`;
+  if (maxSlots === null) return `${takenSlots} going · open group`;
+  const left = Math.max(0, maxSlots - takenSlots);
+  if (left === 0) return `Full · ${takenSlots}/${maxSlots}`;
+  return `${takenSlots}/${maxSlots} · ${left} ${left === 1 ? "spot" : "spots"} left`;
 }

@@ -8,6 +8,7 @@ import { EmptyState, ErrorState } from "@/components/state-views";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { consumeDataMutated } from "@/lib/data-version";
 import { formatEnrolmentYear, formatWhen, isPast } from "@/lib/format";
 import { getPartiesByOrganiser } from "@/lib/supabase/queries/get-parties-by-organiser";
 import { getPartiesByParticipant } from "@/lib/supabase/queries/get-parties-by-participant";
@@ -83,6 +84,12 @@ export default function StudentProfilePage({
   joining = [],
 }: StudentProfileProps) {
   const router = useRouter();
+
+  // Back/forward navigation restores cached props — refetch once when another
+  // page mutated data recently so hosting/joining counts stay truthful.
+  React.useEffect(() => {
+    if (consumeDataMutated()) void router.replace(router.asPath);
+  }, [router]);
 
   if (notFound || !profile) {
     return (

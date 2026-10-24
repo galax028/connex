@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { consumeDataMutated, markDataMutated } from "@/lib/data-version";
 import { formatEnrolmentYear, isPast, plural } from "@/lib/format";
 import { createBrowserClient } from "@/lib/supabase/client";
 import { getPartiesByOrganiser } from "@/lib/supabase/queries/get-parties-by-organiser";
@@ -100,6 +101,12 @@ export default function MyProfilePage({
 }: MyProfileProps) {
   const router = useRouter();
 
+  // Profile edits elsewhere (and fresh sign-ins) land via getServerSideProps;
+  // re-run it once when another page mutated shared data recently.
+  React.useEffect(() => {
+    if (consumeDataMutated()) void router.replace(router.asPath);
+  }, [router]);
+
   const [editingProfile, setEditingProfile] = React.useState(false);
   const [bioDraft, setBioDraft] = React.useState<string | null>(null);
   const [bioError, setBioError] = React.useState<string | null>(null);
@@ -166,6 +173,7 @@ export default function MyProfilePage({
       setTagDraft("");
       setTagError(null);
       setEditingProfile(false);
+      markDataMutated();
       router.replace(router.asPath);
     } finally {
       setSaving(false);
@@ -224,6 +232,7 @@ export default function MyProfilePage({
       }
       setTagDraft("");
       setTagError(null);
+      markDataMutated();
       router.replace(router.asPath);
     } finally {
       setSaving(false);
@@ -246,6 +255,7 @@ export default function MyProfilePage({
         return;
       }
       setTagError(null);
+      markDataMutated();
       router.replace(router.asPath);
     } finally {
       setSaving(false);

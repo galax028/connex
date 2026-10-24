@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { inferArea } from "@/lib/areas";
 import { CREATED_PARTY_FLAG } from "@/lib/created-party";
+import { consumeDataMutated, markDataMutated } from "@/lib/data-version";
 import {
   formatBudgetPerPerson,
   formatEnrolmentYear,
@@ -181,6 +182,13 @@ function PartyDetailsView({
   const supabase = createBrowserClient();
   const refresh = () => router.replace(router.asPath);
 
+  // Back/forward navigation restores cached props — refetch once when another
+  // page or tab mutated this party recently so the crew counts stay truthful.
+  // Own mutations re-render this instance in place, so they don't re-run this.
+  React.useEffect(() => {
+    if (consumeDataMutated()) void router.replace(router.asPath);
+  }, [router]);
+
   // One-shot toast: flagged by the create page right before redirecting here.
   React.useEffect(() => {
     let timer: number | undefined;
@@ -225,6 +233,7 @@ function PartyDetailsView({
         return;
       }
       await syncTakenSlots(supabase, party.id);
+      markDataMutated();
       setJustRequested(true);
       await refresh();
     } finally {
@@ -246,6 +255,7 @@ function PartyDetailsView({
         return;
       }
       await syncTakenSlots(supabase, party.id);
+      markDataMutated();
       setJustRequested(false);
       await refresh();
     } finally {
@@ -278,6 +288,7 @@ function PartyDetailsView({
       if (synced === "full") {
         setJoinError("Party is full — the last spot was just taken.");
       }
+      markDataMutated();
       await refresh();
     } finally {
       setBusy(false);
@@ -298,6 +309,7 @@ function PartyDetailsView({
         return;
       }
       await syncTakenSlots(supabase, party.id);
+      markDataMutated();
       await refresh();
     } finally {
       setBusy(false);
@@ -313,6 +325,7 @@ function PartyDetailsView({
         setConfirmDelete(false);
         return;
       }
+      markDataMutated();
       router.push("/");
     } finally {
       setBusy(false);

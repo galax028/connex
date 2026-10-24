@@ -2,10 +2,12 @@ import * as React from "react";
 import type { GetServerSideProps } from "next";
 import Head from "next/head";
 import Link from "next/link";
+import { useRouter } from "next/router";
 import { PartyCard } from "@/components/party-card";
 import { EmptyState, ErrorState } from "@/components/state-views";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { consumeDataMutated } from "@/lib/data-version";
 import { isPast } from "@/lib/format";
 import { deriveMyStatus } from "@/lib/participants";
 import { getPartiesByOrganiser } from "@/lib/supabase/queries/get-parties-by-organiser";
@@ -47,7 +49,19 @@ export const getServerSideProps: GetServerSideProps<MyActivitiesProps> = async (
 
 type TabKey = "upcoming" | "past";
 
-export default function MyActivitiesPage({ error, userId = "", parties = [] }: MyActivitiesProps) {
+export default function MyActivitiesPage({
+  error,
+  userId = "",
+  parties = [],
+}: MyActivitiesProps) {
+  const router = useRouter();
+
+  // Back/forward navigation restores cached props — refetch once when another
+  // page mutated data recently so statuses and counts stay truthful.
+  React.useEffect(() => {
+    if (consumeDataMutated()) void router.replace(router.asPath);
+  }, [router]);
+
   const [tab, setTab] = React.useState<TabKey>("upcoming");
   const now = React.useMemo(() => new Date().getTime(), []);
 

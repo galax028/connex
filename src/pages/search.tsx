@@ -32,6 +32,7 @@ import {
   rankMatches,
   sortParties,
 } from "@/lib/ai/interpret";
+import { consumeDataMutated } from "@/lib/data-version";
 import type { SortOption } from "@/lib/filters";
 import { formatBudget } from "@/lib/format";
 import { getParties } from "@/lib/supabase/queries/get-parties";
@@ -101,6 +102,12 @@ export default function SearchPage({
 }: SearchProps) {
   const router = useRouter();
   const now = React.useMemo(() => new Date().getTime(), []);
+
+  // Back/forward navigation restores cached props — refetch once when another
+  // page mutated data recently so results and counts stay truthful.
+  React.useEffect(() => {
+    if (consumeDataMutated()) void router.replace(router.asPath);
+  }, [router]);
 
   const CYCLE_OPTIONS: Record<string, string[] | undefined> = {
     category: categories,
