@@ -141,6 +141,49 @@ body {
   color: var(--foreground);
 }
 
+/*
+ * Site-wide decorative backdrop: a pink wash under an offset dot matrix in
+ * the primary colour, spanning the full viewport width at the top of every
+ * page and fading to transparent before the content gets dense. Painted from
+ * body itself, so it sits behind all content and navigation. Purely
+ * presentational.
+ */
+body::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 16rem;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    radial-gradient(
+      circle,
+      color-mix(in oklab, var(--primary) 40%, transparent) 1px,
+      transparent 1px
+    ),
+    radial-gradient(
+      circle,
+      color-mix(in oklab, var(--primary) 40%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--primary) 30%, var(--accent)),
+      transparent 80%
+    );
+  background-size:
+    24px 24px,
+    24px 24px,
+    100% 100%;
+  background-position:
+    0 0,
+    6px 6px,
+    0 0;
+  mask-image: linear-gradient(to bottom, black 0%, black 45%, transparent 100%);
+}
+
 .dark {
   --background: oklch(0.13 0.028 261.692);
   --foreground: oklch(0.985 0.002 247.839);

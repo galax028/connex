@@ -75,9 +75,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Plus data-icon="inline-start" aria-hidden="true" />
           Start a plan
         </Button>
-        <p className="px-1 text-xs text-muted-foreground">
-          Live data from your CU account — sign out from your profile to switch.
-        </p>
       </aside>
 
       <main id="main-content" className="w-full px-4 pt-6 pb-32 lg:pt-10 lg:pb-12 lg:pl-68">
