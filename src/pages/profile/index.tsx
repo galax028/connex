@@ -306,7 +306,7 @@ export default function MyProfilePage({
                     ) : me.biography ? (
                       <p className="text-sm text-foreground/90">{me.biography}</p>
                     ) : (
-                      <p className="text-sm italic text-muted-foreground/80">
+                      <p className="text-sm text-muted-foreground/80 italic">
                         No bio yet — edit your profile to introduce yourself.
                       </p>
                     )}

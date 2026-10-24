@@ -35,15 +35,12 @@ import {
 import { consumeDataMutated } from "@/lib/data-version";
 import type { SortOption } from "@/lib/filters";
 import { formatBudget } from "@/lib/format";
+import { createBrowserClient } from "@/lib/supabase/client";
+import { getParties } from "@/lib/supabase/queries/get-parties";
 import { getPartyCategories } from "@/lib/supabase/queries/get-party-categories";
 import { getProfile } from "@/lib/supabase/queries/get-profile";
-import {
-  searchParties,
-  type SearchFilters,
-} from "@/lib/supabase/queries/search-parties";
-import { getParties } from "@/lib/supabase/queries/get-parties";
+import { type SearchFilters, searchParties } from "@/lib/supabase/queries/search-parties";
 import type { PartySummary, ProfileSummary } from "@/lib/supabase/queries/types";
-import { createBrowserClient } from "@/lib/supabase/client";
 import { createUserServerClient } from "@/lib/supabase/server";
 import { cn } from "cn";
 import { Info, RotateCcw, Search, Sparkles, X } from "lucide-react";
@@ -183,12 +180,10 @@ export default function SearchPage({
         setFetchError(null);
 
         const supabase = createBrowserClient();
-        const result = await searchParties(
-          supabase,
-          toSearchFilters(filters, text),
-          userId,
-          { limit: 20, offset },
-        );
+        const result = await searchParties(supabase, toSearchFilters(filters, text), userId, {
+          limit: 20,
+          offset,
+        });
 
         if (isAppend) {
           isLoadingMoreRef.current = false;
@@ -208,9 +203,7 @@ export default function SearchPage({
         // stale response instead of interleaving pages from different queries.
         if (generation !== requestGenerationRef.current) return;
 
-        setResults((prev) =>
-          isAppend ? [...prev, ...result.parties] : result.parties,
-        );
+        setResults((prev) => (isAppend ? [...prev, ...result.parties] : result.parties));
         setTextOrder(result.textOrder ?? []);
         setHasMore(result.hasMore);
         setNextOffset(result.nextOffset);
@@ -239,12 +232,7 @@ export default function SearchPage({
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (
-          entries[0]?.isIntersecting &&
-          hasMore &&
-          !isLoadingMoreRef.current &&
-          !loading
-        ) {
+        if (entries[0]?.isIntersecting && hasMore && !isLoadingMoreRef.current && !loading) {
           void fetchPage(nextOffset, true);
         }
       },
@@ -300,8 +288,7 @@ export default function SearchPage({
       const rank = new Map(textOrder.map((id, index) => [id, index]));
       return [...results].sort(
         (a, b) =>
-          (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
-          (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER),
+          (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER),
       );
     }
     return results;
@@ -612,10 +599,7 @@ export default function SearchPage({
               </div>
 
               {fetchError ? (
-                <ErrorState
-                  onRetry={() => void fetchPage(0, false)}
-                  body={fetchError}
-                />
+                <ErrorState onRetry={() => void fetchPage(0, false)} body={fetchError} />
               ) : results.length > 0 ? (
                 <>
                   <ul className="grid gap-3 sm:grid-cols-2">

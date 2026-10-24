@@ -105,10 +105,7 @@ export function ParticipantStack({
   );
 }
 
-export function participantCountLabel(
-  takenSlots: number,
-  maxSlots: number | null,
-): string {
+export function participantCountLabel(takenSlots: number, maxSlots: number | null): string {
   if (maxSlots === null) return `${takenSlots} going · open group`;
   const left = Math.max(0, maxSlots - takenSlots);
   if (left === 0) return `Full · ${takenSlots}/${maxSlots}`;
