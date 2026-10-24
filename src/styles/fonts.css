@@ -1,0 +1,47 @@
+@font-face {
+  font-family: "Chulalongkorn";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/chulalongkorn/chulalongkorn_regular.otf") format("opentype");
+}
+
+@font-face {
+  font-family: "Chulalongkorn";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/chulalongkorn/chulalongkorn_bold.otf") format("opentype");
+}
+
+@font-face {
+  font-family: "Sarabun Chula";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/cusarabun/cusarabun_regular.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Sarabun Chula";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/cusarabun/cusarabun_bold.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Sarabun Chula";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/cusarabun/cusarabun_italic.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Sarabun Chula";
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/cusarabun/cusarabun_bolditalic.ttf") format("truetype");
+}
