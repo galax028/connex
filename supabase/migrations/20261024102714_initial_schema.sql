@@ -55,6 +55,35 @@ CREATE TABLE tags (
     name text NOT NULL UNIQUE
 );
 
+INSERT INTO tags (name) VALUES
+('drawing'),
+('painting'),
+('badminton'),
+('football'),
+('running'),
+('basketball'),
+('volleyball'),
+('dessert'),
+('esan food'),
+('korean food'),
+('street food'),
+('tea and coffee'),
+('thai food'),
+('exam prep'),
+('study session'),
+('tutoring'),
+('coding'),
+('hackathon'),
+('photographing'),
+('board games'),
+('esports'),
+('valorant'),
+('rov'),
+('pes efootball'),
+('karaoke'),
+('movies'),
+('concert');
+
 GRANT SELECT, INSERT ON tags TO authenticated;
 GRANT SELECT, INSERT ON tags TO service_role;
 
@@ -142,7 +171,7 @@ CREATE TABLE parties (
     category_id uuid REFERENCES party_categories(id) ON DELETE SET NULL,
     time_start timestamptz NOT NULL,
     time_end timestamptz,
-    location text NOT NULL,
+    location text,
     location_description text,
     location_coordinates point,
     estimated_cost integer CHECK (estimated_cost IS NULL OR estimated_cost > 0),
