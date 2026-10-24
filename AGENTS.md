@@ -6,6 +6,7 @@
 University students. This is part of the CU NEX Hackathon 2026.
 
 Students can:
+
 - Search for activities or groups of students looking to do activities.
 - Participate in an activity by joining other student groups.
 - View other profiles of students.
@@ -18,6 +19,7 @@ real plan.
 ## Working in this repository
 
 Before changing code:
+
 - Read the relevant files and any more specific `AGENTS.md` instructions.
 - Inspect `package.json`, the lockfile, existing migrations, and project
   conventions.
@@ -25,6 +27,7 @@ Before changing code:
 - Prefer the smallest complete change that solves the task.
 
 While working:
+
 - Keep unrelated code unchanged.
 - Use TypeScript for all code related to the frontend or NextJS.
 - Avoid unnecessary abstractions and dependencies.
@@ -36,6 +39,7 @@ While working:
   where applicable.
 
 After working:
+
 - Run the relevant available checks.
 - Report what changed, what was verified, and any remaining limitations.
 - Never claim a check passed unless it was actually run.
@@ -131,6 +135,7 @@ AI interprets intent; the database determines what actually exists.
 ### Initial implementation
 
 Start with:
+
 1. Natural-language input.
 2. A server-side model call producing structured filters.
 3. Backend schema validation.
@@ -143,11 +148,13 @@ Embeddings and vector search are optional enhancements, not prerequisites.
 ### Structured interpretation
 
 Separate:
+
 - **Hard constraints:** explicit budget, time, area, exclusions, and required
   participation conditions.
 - **Soft preferences:** atmosphere, interests, and descriptive similarity.
 
 Requirements:
+
 - Use a bounded schema with allowed values.
 - Represent unspecified preferences explicitly rather than inventing defaults.
 - Validate model output even when structured output is enabled.
@@ -192,4 +199,3 @@ Design mobile-first for quick campus use.
 ## Testing and verification
 
 For now, don't write tests.
-
