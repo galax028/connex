@@ -285,88 +285,22 @@ body::before {
 
 /*
  * Top-of-page route loading indicator (Material Design linear progress).
- * The indeterminate sweep reuses the two-bar translate/scale keyframe pairs
- * from Material Components' linear progress, including the bar offsets that
- * make each bar enter from the left, grow, and exit right. The finishing bar
- * completes to full width and fades out when a navigation ends.
+ * A single rounded indicator sweeps across the track, stretching as it moves;
+ * both keyframe endpoints sit fully offscreen, so the loop is seamless with no
+ * pops or dead gaps. Dismissal fades the whole indicator while the sweep keeps
+ * running, the way Material progress bars close.
  */
-@keyframes route-loading-primary-translate {
+@keyframes route-loading-sweep {
   0% {
-    transform: translateX(0);
-  }
-  20% {
-    animation-timing-function: cubic-bezier(0.5, 0, 0.701732, 0.495819);
-    transform: translateX(0);
-  }
-  59.15% {
-    animation-timing-function: cubic-bezier(0.302435, 0.381352, 0.55, 0.956352);
-    transform: translateX(83.67142%);
+    transform: translateX(-35%) scaleX(0.3);
   }
   100% {
-    transform: translateX(200.611057%);
+    transform: translateX(105%) scaleX(0.6);
   }
 }
 
-@keyframes route-loading-primary-scale {
-  0% {
-    transform: scaleX(0.08);
-  }
-  36.65% {
-    animation-timing-function: cubic-bezier(0.334731, 0.12482, 0.785844, 1);
-    transform: scaleX(0.08);
-  }
-  69.15% {
-    animation-timing-function: cubic-bezier(0.06, 0.11, 0.6, 1);
-    transform: scaleX(0.661479);
-  }
-  100% {
-    transform: scaleX(0.08);
-  }
-}
-
-@keyframes route-loading-secondary-translate {
-  0% {
-    animation-timing-function: cubic-bezier(0.15, 0, 0.515058, 0.409685);
-    transform: translateX(0);
-  }
-  25% {
-    animation-timing-function: cubic-bezier(0.31033, 0.284058, 0.8, 0.733712);
-    transform: translateX(37.651913%);
-  }
-  48.35% {
-    animation-timing-function: cubic-bezier(0.4, 0.627035, 0.6, 0.902026);
-    transform: translateX(84.386165%);
-  }
-  100% {
-    transform: translateX(160.277782%);
-  }
-}
-
-@keyframes route-loading-secondary-scale {
-  0% {
-    animation-timing-function: cubic-bezier(0.205028, 0.057051, 0.57661, 0.453971);
-    transform: scaleX(0.08);
-  }
-  19.15% {
-    animation-timing-function: cubic-bezier(0.152313, 0.196432, 0.648374, 1.004315);
-    transform: scaleX(0.457104);
-  }
-  44.15% {
-    animation-timing-function: cubic-bezier(0.257759, -0.003163, 0.211762, 1.38179);
-    transform: scaleX(0.72796);
-  }
-  100% {
-    transform: scaleX(0.08);
-  }
-}
-
-@keyframes route-loading-finish {
-  from {
-    transform: scaleX(0.95);
-    opacity: 1;
-  }
+@keyframes route-loading-fade {
   to {
-    transform: scaleX(1);
     opacity: 0;
   }
 }
@@ -375,65 +309,26 @@ body::before {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 100%;
-  transform-origin: top left;
-}
-
-.route-loading-bar-inner {
-  position: absolute;
-  top: 0;
-  bottom: 0;
+  left: 0;
   width: 100%;
   border-radius: 9999px;
   background: var(--primary);
-  transform-origin: top left;
+  transform-origin: left center;
+  animation: route-loading-sweep 1.4s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+  will-change: transform;
 }
 
-.route-loading-bar-primary {
-  left: -145.166611%;
-  animation: route-loading-primary-translate 2s infinite linear;
-}
-
-.route-loading-bar-primary > .route-loading-bar-inner {
-  animation: route-loading-primary-scale 2s infinite linear;
-}
-
-.route-loading-bar-secondary {
-  left: -54.888891%;
-  animation: route-loading-secondary-translate 2s infinite linear;
-}
-
-.route-loading-bar-secondary > .route-loading-bar-inner {
-  background: color-mix(in oklab, var(--primary) 55%, transparent);
-  animation: route-loading-secondary-scale 2s infinite linear;
-}
-
-.route-loading-finish {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 100%;
-  border-radius: 9999px;
-  background: var(--primary);
-  transform-origin: top left;
-  animation: route-loading-finish 240ms ease-out forwards;
+.route-loading-closing {
+  animation: route-loading-fade 250ms ease-out forwards;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .route-loading-bar,
-  .route-loading-bar > .route-loading-bar-inner {
+  .route-loading-bar {
     animation: none;
-  }
-  .route-loading-bar-secondary {
-    display: none;
-  }
-  .route-loading-bar-primary {
-    left: 0;
-  }
-  .route-loading-bar-primary > .route-loading-bar-inner {
     transform: scaleX(0.3);
   }
-  .route-loading-finish {
-    display: none;
+  .route-loading-closing {
+    animation: none;
+    opacity: 0;
   }
 }
