@@ -333,14 +333,16 @@ export function interpretQuery(rawQuery: string): Interpretation {
     const term = firstMatch(q, CATEGORY_WORDS[categories[0]]);
     if (term) consumed.push(term);
     if (categories.length > 1)
-      notes.push(`Several categories matched — using ${categories[0]}. Remove the chip to widen.`);
-    filters.category = categories[0];
-    chips.push({
-      id: "category",
-      field: "category",
-      label: categories[0],
-      value: categories[0],
-    });
+      notes.push("Several categories matched — remove the ones you don't want.");
+    for (const category of categories) {
+      chips.push({
+        id: `category-${category}`,
+        field: "category",
+        label: category,
+        value: category,
+      });
+    }
+    filters.category = categories;
     // Keep specific activities ("แบด", "karaoke") as an extra keyword chip so
     // the category chip alone doesn't blur e.g. badminton into all sports.
     const GENERIC_TERMS = new Set([
@@ -374,28 +376,26 @@ export function interpretQuery(rawQuery: string): Interpretation {
   if (days.length > 0) {
     const term = firstMatch(q, days[0][1]);
     if (term) consumed.push(term);
-    if (days.length > 1)
-      notes.push(`Several time hints found — using "${days[0][0].replace("_", " ")}".`);
-    filters.dayWithin = days[0][0];
-    chips.push({
-      id: "dayWithin",
-      field: "dayWithin",
-      label: days[0][0].replace("_", " "),
-      value: days[0][0],
-    });
+    if (days.length > 1) notes.push("Several time windows matched — keep the ones you want.");
+    for (const [day] of days) {
+      chips.push({
+        id: `dayWithin-${day}`,
+        field: "dayWithin",
+        label: day.replace("_", " "),
+        value: day,
+      });
+    }
+    filters.dayWithin = days.map(([day]) => day);
   }
 
   const times = TIME_WORDS.filter(([, words]) => includesAny(q, words));
   if (times.length > 0) {
     const term = firstMatch(q, times[0][1]);
     if (term) consumed.push(term);
-    filters.timeOfDay = times[0][0];
-    chips.push({
-      id: "timeOfDay",
-      field: "timeOfDay",
-      label: times[0][0],
-      value: times[0][0],
-    });
+    for (const [time] of times) {
+      chips.push({ id: `timeOfDay-${time}`, field: "timeOfDay", label: time, value: time });
+    }
+    filters.timeOfDay = times.map(([time]) => time);
   }
 
   const budget = extractBudget(q);
@@ -417,8 +417,10 @@ export function interpretQuery(rawQuery: string): Interpretation {
   if (areas.length > 0) {
     const term = firstMatch(q, areas[0][1]);
     if (term) consumed.push(term);
-    filters.area = areas[0][0];
-    chips.push({ id: "area", field: "area", label: areas[0][0], value: areas[0][0] });
+    for (const [area] of areas) {
+      chips.push({ id: `area-${area}`, field: "area", label: area, value: area });
+    }
+    filters.area = areas.map(([area]) => area);
   }
 
   const people = extractMinPeople(q);
@@ -488,6 +490,14 @@ export function partyMatchesTimeOfDay(party: PartySummary, timeOfDay: TimeOfDay)
   return hour >= 17;
 }
 
+export function partyMatchesArea(party: PartySummary, area: string): boolean {
+  const needle = area.toLowerCase();
+  return (
+    inferArea(party.location).toLowerCase().includes(needle) ||
+    party.location.toLowerCase().includes(needle)
+  );
+}
+
 export function partyMatchesText(party: PartySummary, keywords: string[]): boolean {
   if (keywords.length === 0) return true;
   const haystack = [
@@ -523,22 +533,25 @@ export function applyFilters(
     if (party.organiserId === viewerId) return false;
     if (party.participants.some((p) => p.id === viewerId)) return false;
     if (isPast(party.timeStart, now)) return false;
-    if (filters.category && party.categoryName !== filters.category) return false;
-    if (filters.dayWithin && !partyMatchesDay(party, filters.dayWithin, now)) return false;
-    if (filters.timeOfDay && !partyMatchesTimeOfDay(party, filters.timeOfDay)) return false;
+    if (filters.category?.length && !filters.category.includes(party.categoryName ?? ""))
+      return false;
+    if (
+      filters.dayWithin?.length &&
+      !filters.dayWithin.some((day) => partyMatchesDay(party, day, now))
+    )
+      return false;
+    if (
+      filters.timeOfDay?.length &&
+      !filters.timeOfDay.some((slot) => partyMatchesTimeOfDay(party, slot))
+    )
+      return false;
     if (filters.budgetMax !== undefined && partyCost(party) > filters.budgetMax) return false;
     if (filters.minSpots !== undefined) {
       const accepted = approvedParticipants(party).length;
       if (spotsLeft(party.maxSlots, accepted) < filters.minSpots) return false;
     }
-    if (filters.area) {
-      const area = filters.area.toLowerCase();
-      if (
-        !inferArea(party.location).toLowerCase().includes(area) &&
-        !party.location.toLowerCase().includes(area)
-      )
-        return false;
-    }
+    if (filters.area?.length && !filters.area.some((area) => partyMatchesArea(party, area)))
+      return false;
     return partyMatchesText(party, keywords);
   });
 }
@@ -568,7 +581,7 @@ export function rankMatches(
     const reasons: string[] = [];
     let score = 0;
 
-    if (filters.category && party.categoryName === filters.category) {
+    if (filters.category?.includes(party.categoryName ?? "")) {
       score += 30;
       reasons.push(`Matches ${party.categoryName}`);
     }
@@ -590,23 +603,20 @@ export function rankMatches(
         score -= 40;
       }
     }
-    if (filters.dayWithin && partyMatchesDay(party, filters.dayWithin, now)) {
+    const matchedDay = filters.dayWithin?.find((day) => partyMatchesDay(party, day, now));
+    if (matchedDay) {
       score += 8;
-      reasons.push(`Happens ${filters.dayWithin.replace("_", " ")}`);
+      reasons.push(`Happens ${matchedDay.replace("_", " ")}`);
     }
-    if (filters.timeOfDay && partyMatchesTimeOfDay(party, filters.timeOfDay)) {
+    const matchedTime = filters.timeOfDay?.find((slot) => partyMatchesTimeOfDay(party, slot));
+    if (matchedTime) {
       score += 4;
-      reasons.push(`${filters.timeOfDay} time slot`);
+      reasons.push(`${matchedTime} time slot`);
     }
-    if (filters.area) {
-      const area = filters.area.toLowerCase();
-      if (
-        inferArea(party.location).toLowerCase().includes(area) ||
-        party.location.toLowerCase().includes(area)
-      ) {
-        score += 8;
-        reasons.push(`In ${inferArea(party.location)}`);
-      }
+    const matchedArea = filters.area?.find((area) => partyMatchesArea(party, area));
+    if (matchedArea) {
+      score += 8;
+      reasons.push(`In ${inferArea(party.location)}`);
     }
     const overlap = party.tags.filter((tag) => viewerTags.has(tag.name.toLowerCase()));
     if (overlap.length > 0) {
@@ -648,7 +658,7 @@ export function sortParties(
 /* ------------------------------ chip editing ------------------------------- */
 
 export const CHIP_CYCLES: Partial<Record<ChipField, string[]>> = {
-  dayWithin: ["today", "tomorrow", "weekend", "this week"],
+  dayWithin: ["today", "tomorrow", "weekend", "this_week"],
   timeOfDay: ["morning", "afternoon", "evening"],
   budgetMax: ["100", "200", "300", "500", "0"],
 };
@@ -678,19 +688,19 @@ export function filtersFromChips(chips: InterpretationChip[]): PartyFilters {
   for (const chip of chips) {
     switch (chip.field) {
       case "category":
-        filters.category = chip.value;
+        filters.category = [...(filters.category ?? []), chip.value];
         break;
       case "dayWithin":
-        filters.dayWithin = chip.value as DayWithin;
+        filters.dayWithin = [...(filters.dayWithin ?? []), chip.value as DayWithin];
         break;
       case "timeOfDay":
-        filters.timeOfDay = chip.value as TimeOfDay;
+        filters.timeOfDay = [...(filters.timeOfDay ?? []), chip.value as TimeOfDay];
         break;
       case "budgetMax":
         filters.budgetMax = Number(chip.value);
         break;
       case "area":
-        filters.area = chip.value;
+        filters.area = [...(filters.area ?? []), chip.value];
         break;
       case "minSpots":
         filters.minSpots = Number(chip.value);

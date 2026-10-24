@@ -60,7 +60,8 @@ export default function MyActivitiesPage({
   // page mutated data recently so statuses and counts stay truthful.
   React.useEffect(() => {
     if (consumeDataMutated()) void router.replace(router.asPath);
-  }, [router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: consume the staleness flag once per mount
+  }, []);
 
   const [tab, setTab] = React.useState<TabKey>("upcoming");
   const now = React.useMemo(() => new Date().getTime(), []);

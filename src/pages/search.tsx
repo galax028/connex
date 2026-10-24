@@ -107,7 +107,8 @@ export default function SearchPage({
   // page mutated data recently so results and counts stay truthful.
   React.useEffect(() => {
     if (consumeDataMutated()) void router.replace(router.asPath);
-  }, [router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: consume the staleness flag once per mount
+  }, []);
 
   const CYCLE_OPTIONS: Record<string, string[] | undefined> = {
     category: categories,
@@ -145,8 +146,11 @@ export default function SearchPage({
     /* eslint-disable react-hooks/set-state-in-effect */
     if (router.query.mode === "ai") setMode("ai");
     const category = router.query.category;
-    if (typeof category === "string" && categories.includes(category)) {
-      setFilters((prev) => ({ ...prev, category }));
+    if (typeof category === "string") {
+      const names = category.split(",").filter((name) => categories.includes(name));
+      if (names.length > 0) {
+        setFilters((prev) => ({ ...prev, category: names }));
+      }
     }
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [router.isReady, router.query.mode, router.query.category, categories]);
@@ -179,8 +183,28 @@ export default function SearchPage({
     return sortParties(filtered, sort, undefined);
   }, [parties, filters, manualKeywordList, sort, userId, now]);
 
-  const activeFilterCount = Object.values(filters).filter(Boolean).length;
+  const activeFilterCount =
+    (filters.category?.length ?? 0) +
+    (filters.dayWithin?.length ?? 0) +
+    (filters.timeOfDay?.length ?? 0) +
+    (filters.area?.length ?? 0) +
+    (filters.budgetMax !== undefined ? 1 : 0) +
+    (filters.minSpots !== undefined ? 1 : 0);
   const hasManualQuery = manualKeywordList.length > 0 || activeFilterCount > 0;
+  const activeSheetFilterCount =
+    (filters.dayWithin?.length ?? 0) +
+    (filters.timeOfDay?.length ?? 0) +
+    (filters.area?.length ?? 0) +
+    (filters.budgetMax !== undefined ? 1 : 0) +
+    (filters.minSpots !== undefined ? 1 : 0);
+  const hasSheetFilterBadges = activeSheetFilterCount > 0 || manualKeywordList.length > 0;
+
+  const removeFilterValue = (field: "dayWithin" | "timeOfDay" | "area", value: string) => {
+    setFilters((f) => {
+      const next = (f[field] ?? []).filter((v) => v !== value);
+      return { ...f, [field]: next.length > 0 ? next : undefined } as ManualFilters;
+    });
+  };
 
   const relaxActions: Array<{ label: string; clear: () => void }> = [];
   if (filters.budgetMax !== undefined)
@@ -188,7 +212,7 @@ export default function SearchPage({
       label: "Any budget",
       clear: () => setFilters((f) => ({ ...f, budgetMax: undefined })),
     });
-  if (filters.dayWithin)
+  if (filters.dayWithin?.length)
     relaxActions.push({
       label: "Any date",
       clear: () => setFilters((f) => ({ ...f, dayWithin: undefined })),
@@ -198,12 +222,17 @@ export default function SearchPage({
       label: "Any group size",
       clear: () => setFilters((f) => ({ ...f, minSpots: undefined })),
     });
-  if (filters.area)
+  if (filters.timeOfDay?.length)
+    relaxActions.push({
+      label: "Any time",
+      clear: () => setFilters((f) => ({ ...f, timeOfDay: undefined })),
+    });
+  if (filters.area?.length)
     relaxActions.push({
       label: "Any area",
       clear: () => setFilters((f) => ({ ...f, area: undefined })),
     });
-  if (filters.category)
+  if (filters.category?.length)
     relaxActions.push({
       label: "All categories",
       clear: () => setFilters((f) => ({ ...f, category: undefined })),
@@ -359,74 +388,33 @@ export default function SearchPage({
                 </div>
               </div>
 
-              {hasManualQuery ? (
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {filters.category ? (
-                    <FilterChip
-                      label={filters.category}
-                      onRemove={() => setFilters((f) => ({ ...f, category: undefined }))}
-                    />
-                  ) : null}
-                  {filters.dayWithin ? (
-                    <FilterChip
-                      label={DAY_OPTIONS.find((o) => o.value === filters.dayWithin)?.label ?? ""}
-                      onRemove={() => setFilters((f) => ({ ...f, dayWithin: undefined }))}
-                    />
-                  ) : null}
-                  {filters.timeOfDay ? (
-                    <FilterChip
-                      label={TIME_OPTIONS.find((o) => o.value === filters.timeOfDay)?.label ?? ""}
-                      onRemove={() => setFilters((f) => ({ ...f, timeOfDay: undefined }))}
-                    />
-                  ) : null}
-                  {filters.budgetMax !== undefined ? (
-                    <FilterChip
-                      label={
-                        filters.budgetMax === 0 ? "Free" : `≤ ${formatBudget(filters.budgetMax)}`
-                      }
-                      onRemove={() => setFilters((f) => ({ ...f, budgetMax: undefined }))}
-                    />
-                  ) : null}
-                  {filters.area ? (
-                    <FilterChip
-                      label={filters.area}
-                      onRemove={() => setFilters((f) => ({ ...f, area: undefined }))}
-                    />
-                  ) : null}
-                  {filters.minSpots !== undefined ? (
-                    <FilterChip
-                      label={`Room for ${filters.minSpots}+`}
-                      onRemove={() => setFilters((f) => ({ ...f, minSpots: undefined }))}
-                    />
-                  ) : null}
-                  {manualKeywordList.length > 0 ? (
-                    <FilterChip label={`“${text.trim()}”`} onRemove={() => setText("")} />
-                  ) : null}
-                </div>
-              ) : (
+              <div className="flex flex-col gap-1.5">
                 <div
                   className="flex items-center gap-2 overflow-x-auto pb-1"
                   role="group"
                   aria-label="Quick category filters"
                 >
                   <Button
-                    variant={filters.category ? "outline" : "default"}
+                    variant={filters.category?.length ? "outline" : "default"}
                     size="sm"
                     onClick={() => setFilters((f) => ({ ...f, category: undefined }))}
-                    disabled={!filters.category}
+                    disabled={!filters.category?.length}
                   >
                     All
                   </Button>
                   {categories.map((category) => (
                     <Button
                       key={category}
-                      variant={filters.category === category ? "default" : "outline"}
+                      variant={filters.category?.includes(category) ? "default" : "outline"}
                       size="sm"
                       onClick={() =>
-                        setFilters((f) => ({
-                          ...f,
-                          category: f.category === category ? undefined : category,
-                        }))
+                        setFilters((f) => {
+                          const current = f.category ?? [];
+                          const next = current.includes(category)
+                            ? current.filter((value) => value !== category)
+                            : [...current, category];
+                          return { ...f, category: next.length > 0 ? next : undefined };
+                        })
                       }
                       className="shrink-0"
                     >
@@ -434,7 +422,49 @@ export default function SearchPage({
                     </Button>
                   ))}
                 </div>
-              )}
+                {hasSheetFilterBadges ? (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {(filters.dayWithin ?? []).map((value) => (
+                      <FilterChip
+                        key={`dayWithin-${value}`}
+                        label={DAY_OPTIONS.find((o) => o.value === value)?.label ?? value}
+                        onRemove={() => removeFilterValue("dayWithin", value)}
+                      />
+                    ))}
+                    {(filters.timeOfDay ?? []).map((value) => (
+                      <FilterChip
+                        key={`timeOfDay-${value}`}
+                        label={TIME_OPTIONS.find((o) => o.value === value)?.label ?? value}
+                        onRemove={() => removeFilterValue("timeOfDay", value)}
+                      />
+                    ))}
+                    {filters.budgetMax !== undefined ? (
+                      <FilterChip
+                        label={
+                          filters.budgetMax === 0 ? "Free" : `≤ ${formatBudget(filters.budgetMax)}`
+                        }
+                        onRemove={() => setFilters((f) => ({ ...f, budgetMax: undefined }))}
+                      />
+                    ) : null}
+                    {(filters.area ?? []).map((value) => (
+                      <FilterChip
+                        key={`area-${value}`}
+                        label={value}
+                        onRemove={() => removeFilterValue("area", value)}
+                      />
+                    ))}
+                    {filters.minSpots !== undefined ? (
+                      <FilterChip
+                        label={`Room for ${filters.minSpots}+`}
+                        onRemove={() => setFilters((f) => ({ ...f, minSpots: undefined }))}
+                      />
+                    ) : null}
+                    {manualKeywordList.length > 0 ? (
+                      <FilterChip label={`“${text.trim()}”`} onRemove={() => setText("")} />
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
 
               {manualResults.length > 0 ? (
                 <ul className="grid gap-3 sm:grid-cols-2">

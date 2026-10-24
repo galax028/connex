@@ -1,4 +1,5 @@
 import * as React from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { Button } from "@/components/ui/button";
@@ -57,9 +58,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col gap-6 border-r bg-sidebar px-4 py-6 lg:flex">
         <Link
           href="/"
-          className="rounded-lg px-3 font-heading heading-2 font-semibold tracking-tight text-primary outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          className="block w-fit rounded-lg px-3 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         >
-          CONNEX
+          <Image
+            src="/images/logo/logo-full-light.svg"
+            alt="CONNEX"
+            width={2028}
+            height={555}
+            className="h-10 w-auto"
+          />
         </Link>
         <nav aria-label="Main" className="flex flex-col gap-1">
           {desktopItems.map(railLink)}

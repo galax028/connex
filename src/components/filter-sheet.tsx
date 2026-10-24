@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/sheet";
 import type { DayWithin, PartyFilters, TimeOfDay } from "@/lib/filters";
 import { formatBudget } from "@/lib/format";
+import { cn } from "cn";
 import { RotateCcw, SlidersHorizontal } from "lucide-react";
 
 export type ManualFilters = PartyFilters;
@@ -65,7 +66,13 @@ export function FilterSheet({
   onChange: (patch: Partial<ManualFilters>) => void;
   onReset: () => void;
 }) {
-  const activeCount = Object.values(filters).filter(Boolean).length;
+  const activeCount =
+    (filters.category?.length ?? 0) +
+    (filters.dayWithin?.length ?? 0) +
+    (filters.timeOfDay?.length ?? 0) +
+    (filters.area?.length ?? 0) +
+    (filters.budgetMax !== undefined ? 1 : 0) +
+    (filters.minSpots !== undefined ? 1 : 0);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -86,74 +93,26 @@ export function FilterSheet({
           <SheetDescription>Results below update live as you change filters.</SheetDescription>
         </SheetHeader>
         <div className="flex flex-col gap-4 px-4 pb-2">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="filter-category">Category</Label>
-            <Select
-              value={filters.category ?? null}
-              onValueChange={(value) => onChange({ category: value ?? undefined })}
-            >
-              <SelectTrigger id="filter-category" className="w-full">
-                <SelectValue>{filters.category ?? "Any category"}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {categories.map((category) => (
-                  <SelectItem key={category} value={category}>
-                    {category}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <FilterChips
+            label="Category"
+            options={categories.map((name) => ({ value: name, label: name }))}
+            selected={filters.category ?? []}
+            onChange={(next) => onChange({ category: next.length > 0 ? next : undefined })}
+          />
 
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="filter-day">When</Label>
-            <Select
-              value={filters.dayWithin ?? null}
-              onValueChange={(value) =>
-                onChange({ dayWithin: (value as DayWithin | null) ?? undefined })
-              }
-            >
-              <SelectTrigger id="filter-day" className="w-full">
-                <SelectValue>
-                  {filters.dayWithin
-                    ? DAY_OPTIONS.find((option) => option.value === filters.dayWithin)?.label
-                    : "Any day"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {DAY_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <FilterChips
+            label="When"
+            options={DAY_OPTIONS}
+            selected={filters.dayWithin ?? []}
+            onChange={(next) => onChange({ dayWithin: next.length > 0 ? next : undefined })}
+          />
 
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="filter-time">Time of day</Label>
-            <Select
-              value={filters.timeOfDay ?? null}
-              onValueChange={(value) =>
-                onChange({ timeOfDay: (value as TimeOfDay | null) ?? undefined })
-              }
-            >
-              <SelectTrigger id="filter-time" className="w-full">
-                <SelectValue>
-                  {filters.timeOfDay
-                    ? TIME_OPTIONS.find((option) => option.value === filters.timeOfDay)?.label
-                    : "Any time"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {TIME_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <FilterChips
+            label="Time of day"
+            options={TIME_OPTIONS}
+            selected={filters.timeOfDay ?? []}
+            onChange={(next) => onChange({ timeOfDay: next.length > 0 ? next : undefined })}
+          />
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="filter-budget">Budget per person</Label>
@@ -183,24 +142,12 @@ export function FilterSheet({
             </Select>
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="filter-area">Area</Label>
-            <Select
-              value={filters.area ?? null}
-              onValueChange={(value) => onChange({ area: value ?? undefined })}
-            >
-              <SelectTrigger id="filter-area" className="w-full">
-                <SelectValue>{filters.area ?? "Anywhere"}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {AREA_OPTIONS.map((area) => (
-                  <SelectItem key={area} value={area}>
-                    {area}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <FilterChips
+            label="Area"
+            options={AREA_OPTIONS.map((name) => ({ value: name, label: name }))}
+            selected={filters.area ?? []}
+            onChange={(next) => onChange({ area: next.length > 0 ? next : undefined })}
+          />
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="filter-spots">Open spots needed</Label>
@@ -241,3 +188,49 @@ export function FilterSheet({
 }
 
 export { DAY_OPTIONS, TIME_OPTIONS, AREA_OPTIONS };
+
+/** Multi-select pill row: tapping a value toggles it in/out of `selected`. */
+function FilterChips<T extends string>({
+  label,
+  options,
+  selected,
+  onChange,
+}: {
+  label: string;
+  options: Array<{ value: T; label: string }>;
+  selected: T[];
+  onChange: (next: T[]) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label id={`filter-${label.toLowerCase().replaceAll(" ", "-")}-label`}>{label}</Label>
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label={label}>
+        {options.map((option) => {
+          const active = selected.includes(option.value);
+          return (
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={active}
+              onClick={() =>
+                onChange(
+                  active
+                    ? selected.filter((value) => value !== option.value)
+                    : [...selected, option.value],
+                )
+              }
+              className={cn(
+                "rounded-full border px-2.5 py-1 text-xs transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                active
+                  ? "border-transparent bg-primary text-primary-foreground"
+                  : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

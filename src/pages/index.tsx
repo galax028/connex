@@ -68,7 +68,8 @@ export default function HomePage({
   // page mutated data recently so counts and picks stay truthful.
   React.useEffect(() => {
     if (consumeDataMutated()) void router.replace(router.asPath);
-  }, [router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: consume the staleness flag once per mount
+  }, []);
 
   const now = React.useMemo(() => new Date().getTime(), []);
 

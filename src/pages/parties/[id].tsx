@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { CategoryChip } from "@/components/category-chip";
 import { ParticipantAvatar } from "@/components/participant-avatar";
+import { ShareButtons } from "@/components/share-buttons";
 import { EmptyState, ErrorState, SuccessBanner } from "@/components/state-views";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -187,7 +188,8 @@ function PartyDetailsView({
   // Own mutations re-render this instance in place, so they don't re-run this.
   React.useEffect(() => {
     if (consumeDataMutated()) void router.replace(router.asPath);
-  }, [router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: consume the staleness flag once per mount
+  }, []);
 
   // One-shot toast: flagged by the create page right before redirecting here.
   React.useEffect(() => {
@@ -341,11 +343,16 @@ function PartyDetailsView({
       </Head>
 
       <div className="flex flex-col gap-5">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="ghost" size="icon-sm" aria-label="Go back" onClick={() => router.back()}>
             <ArrowLeft aria-hidden="true" />
           </Button>
           <span className="text-sm text-muted-foreground">Party details</span>
+          <ShareButtons
+            title={party.title}
+            text={`Check out this plan on CONNEX: ${party.title}`}
+            className="ml-auto"
+          />
         </div>
 
         <header className="flex flex-col gap-2.5">

@@ -7,10 +7,9 @@ import { ParticipantAvatar } from "@/components/participant-avatar";
 import { EmptyState, ErrorState } from "@/components/state-views";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { consumeDataMutated, markDataMutated } from "@/lib/data-version";
 import { formatEnrolmentYear, isPast, plural } from "@/lib/format";
@@ -22,7 +21,7 @@ import { getTags } from "@/lib/supabase/queries/get-tags";
 import type { PartySummary, ProfileSummary } from "@/lib/supabase/queries/types";
 import { createUserServerClient } from "@/lib/supabase/server";
 import { cn } from "cn";
-import { Check, Eye, EyeOff, LogOut, Pencil, Plus, Settings2, X } from "lucide-react";
+import { Check, LogOut, Pencil, Plus, X } from "lucide-react";
 
 export interface MyProfileProps {
   error: boolean;
@@ -66,31 +65,6 @@ export const getServerSideProps: GetServerSideProps<MyProfileProps> = async ({ r
   };
 };
 
-interface PrivacySettings {
-  showFaculty: boolean;
-  showYear: boolean;
-  showBio: boolean;
-}
-
-const PRIVACY_KEY = "connex.privacy.v1";
-
-const DEFAULT_PRIVACY: PrivacySettings = {
-  showFaculty: true,
-  showYear: true,
-  showBio: true,
-};
-
-function loadPrivacy(): PrivacySettings {
-  try {
-    const raw = window.localStorage.getItem(PRIVACY_KEY);
-    if (!raw) return DEFAULT_PRIVACY;
-    const parsed = JSON.parse(raw) as Partial<PrivacySettings>;
-    return { ...DEFAULT_PRIVACY, ...parsed };
-  } catch {
-    return DEFAULT_PRIVACY;
-  }
-}
-
 export default function MyProfilePage({
   error,
   userId = "",
@@ -105,7 +79,8 @@ export default function MyProfilePage({
   // re-run it once when another page mutated shared data recently.
   React.useEffect(() => {
     if (consumeDataMutated()) void router.replace(router.asPath);
-  }, [router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: consume the staleness flag once per mount
+  }, []);
 
   const [editingProfile, setEditingProfile] = React.useState(false);
   const [bioDraft, setBioDraft] = React.useState<string | null>(null);
@@ -113,25 +88,6 @@ export default function MyProfilePage({
   const [tagDraft, setTagDraft] = React.useState("");
   const [tagError, setTagError] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
-
-  // Privacy has no DB columns — a local setting with localStorage persistence.
-  const [privacy, setPrivacyState] = React.useState<PrivacySettings>(DEFAULT_PRIVACY);
-  React.useEffect(() => {
-    /* eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is only readable after mount */
-    setPrivacyState(loadPrivacy());
-  }, []);
-
-  const setPrivacy = (key: keyof PrivacySettings, value: boolean) => {
-    setPrivacyState((prev) => {
-      const next = { ...prev, [key]: value };
-      try {
-        window.localStorage.setItem(PRIVACY_KEY, JSON.stringify(next));
-      } catch {
-        // storage unavailable — settings stay in memory
-      }
-      return next;
-    });
-  };
 
   const me = profile;
 
@@ -153,16 +109,12 @@ export default function MyProfilePage({
 
   const saveProfile = async () => {
     const trimmed = (bioDraft ?? "").trim();
-    if (!trimmed) {
-      setBioError("Bio can’t be empty — write a line about yourself.");
-      return;
-    }
     setSaving(true);
     try {
       const supabase = createBrowserClient();
       const { error } = await supabase
         .from("user_profiles")
-        .update({ biography: trimmed })
+        .update({ biography: trimmed || null })
         .eq("id", userId);
       if (error) {
         setBioError("Could not save your bio. Try again.");
@@ -273,11 +225,6 @@ export default function MyProfilePage({
     .map((tag) => tag.name)
     .slice(0, 8);
 
-  const privacyRows: Array<{ key: keyof PrivacySettings; label: string }> = [
-    { key: "showFaculty", label: "Show my faculty & year" },
-    { key: "showBio", label: "Show my bio" },
-  ];
-
   const yearLabel = formatEnrolmentYear(me.enrolmentYear);
 
   return (
@@ -286,14 +233,11 @@ export default function MyProfilePage({
         <title>Your profile · CONNEX</title>
       </Head>
       <div className="flex flex-col gap-5">
-        <header className="flex flex-col gap-1">
+        <header>
           <h1 className="font-heading heading-1 font-semibold tracking-tight">Your profile</h1>
-          <p className="text-sm text-muted-foreground">
-            Signed in with your Chulalongkorn Google account.
-          </p>
         </header>
 
-        <div className="flex flex-col gap-5 lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-10">
+        <div className="flex flex-col gap-5">
           <div className="flex min-w-0 flex-col gap-5">
             <Card size="sm">
               <CardContent className="flex flex-col gap-4 pt-1">
@@ -359,8 +303,12 @@ export default function MyProfilePage({
                           </span>
                         </div>
                       </div>
-                    ) : (
+                    ) : me.biography ? (
                       <p className="text-sm text-foreground/90">{me.biography}</p>
+                    ) : (
+                      <p className="text-sm italic text-muted-foreground/80">
+                        No bio yet — edit your profile to introduce yourself.
+                      </p>
                     )}
                   </div>
                 </div>
@@ -463,6 +411,15 @@ export default function MyProfilePage({
                   </Button>
                 ) : null}
               </CardContent>
+              <CardFooter className="flex-wrap justify-between gap-x-3 gap-y-2">
+                <p className="min-w-0 text-xs text-muted-foreground">
+                  Signed in with your Chulalongkorn Google account.
+                </p>
+                <Button variant="destructive" size="sm" onClick={signOut}>
+                  <LogOut data-icon="inline-start" aria-hidden="true" />
+                  Sign out
+                </Button>
+              </CardFooter>
             </Card>
 
             <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-2">
@@ -508,57 +465,6 @@ export default function MyProfilePage({
                 />
               )}
             </section>
-          </div>
-
-          <div className="self-start lg:sticky lg:top-6">
-            <Card size="sm">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Settings2 aria-hidden="true" className="size-4 text-muted-foreground" />
-                  Privacy (local setting)
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-4 pt-0">
-                <p className="text-sm text-muted-foreground">
-                  Stored in this browser only for now — not yet enforced in the database.
-                </p>
-                {privacyRows.map((row) => (
-                  <div key={row.key} className="flex items-center justify-between gap-4">
-                    <Label htmlFor={`privacy-${row.key}`} className="text-sm font-normal">
-                      {row.label}
-                    </Label>
-                    <Switch
-                      id={`privacy-${row.key}`}
-                      checked={privacy[row.key]}
-                      onCheckedChange={(checked) => setPrivacy(row.key, checked === true)}
-                    />
-                  </div>
-                ))}
-                <div className="rounded-lg border border-dashed border-border bg-muted/40 p-3">
-                  <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                    {privacy.showFaculty ? (
-                      <Eye aria-hidden="true" className="size-3.5" />
-                    ) : (
-                      <EyeOff aria-hidden="true" className="size-3.5" />
-                    )}
-                    How others see you
-                  </p>
-                  <p className="text-sm font-medium">{me.name}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {privacy.showFaculty
-                      ? `${me.facultyName}${yearLabel ? ` · ${yearLabel}` : ""}`
-                      : "Faculty hidden"}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {privacy.showBio ? me.biography : "Bio hidden"}
-                  </p>
-                </div>
-                <Button variant="outline" onClick={signOut}>
-                  <LogOut data-icon="inline-start" aria-hidden="true" />
-                  Sign out
-                </Button>
-              </CardContent>
-            </Card>
           </div>
         </div>
       </div>

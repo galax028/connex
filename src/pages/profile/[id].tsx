@@ -89,7 +89,8 @@ export default function StudentProfilePage({
   // page mutated data recently so hosting/joining counts stay truthful.
   React.useEffect(() => {
     if (consumeDataMutated()) void router.replace(router.asPath);
-  }, [router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: consume the staleness flag once per mount
+  }, []);
 
   if (notFound || !profile) {
     return (
