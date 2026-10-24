@@ -153,7 +153,7 @@ export default function HomePage({
                 <ul className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-2">
                   {aiPicks.map(({ party, reasons }) => (
                     <li key={party.id} className="flex w-[17.5rem] shrink-0 snap-start">
-                      <PartyCard party={party} aiReason={reasons[0]} className="h-full" />
+                      <PartyCard party={party} aiReason={reasons[0]} className="h-full w-full" />
                     </li>
                   ))}
                 </ul>
