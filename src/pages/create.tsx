@@ -25,14 +25,16 @@ import { markDataMutated } from "@/lib/data-version";
 import type { MapPin } from "@/lib/filters";
 import { daysFromToday, toBangkokIso } from "@/lib/format";
 import { createBrowserClient } from "@/lib/supabase/client";
+import type { Database } from "@/lib/supabase/database.types";
 import { getPartyCategories } from "@/lib/supabase/queries/get-party-categories";
 import { getProfile } from "@/lib/supabase/queries/get-profile";
 import { getTags } from "@/lib/supabase/queries/get-tags";
 import { formatPointColumn } from "@/lib/supabase/queries/map-party-summary";
 import type { PartySummary, ProfileSummary } from "@/lib/supabase/queries/types";
 import { createUserServerClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { cn } from "cn";
-import { ArrowLeft, CalendarPlus, Eye } from "lucide-react";
+import { ArrowLeft, CalendarPlus, Eye, Plus } from "lucide-react";
 
 const MapPinPicker = dynamic(
   () => import("@/components/map-pin-picker").then((m) => m.MapPinPicker),
@@ -202,11 +204,57 @@ export default function CreatePartyPage({
   const [errors, setErrors] = React.useState<FormErrors>({});
   const [summaryError, setSummaryError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
+  const [tagDraft, setTagDraft] = React.useState("");
+  const [tagError, setTagError] = React.useState<string | null>(null);
+  const [tagSaving, setTagSaving] = React.useState(false);
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
     setErrors((prev) => ({ ...prev, [key]: undefined }));
     setSummaryError(null);
+  };
+
+  // Same rules as the profile page chips: lowercase, ≤24 chars, no duplicates.
+  // Each add also creates the tag on the server right away, not just locally.
+  const addInterest = async (raw: string) => {
+    const tag = raw.trim().toLowerCase();
+    if (!tag) return;
+    if (tag.length > 24) {
+      setTagError("Keep tags under 24 characters.");
+      return;
+    }
+    if (form.interests.some((i) => i.toLowerCase() === tag)) {
+      setTagError(`“${tag}” is already selected.`);
+      return;
+    }
+    if (form.interests.length >= 12) {
+      setTagError("Up to 12 tags — remove one first.");
+      return;
+    }
+    setTagSaving(true);
+    try {
+      const supabase = createBrowserClient();
+      // tags.name is UNIQUE and case-sensitive — normalize before lookup/insert.
+      const tagId = await ensureTagId(supabase, tag);
+      if (!tagId) {
+        setTagError("Could not add the tag. Try again.");
+        return;
+      }
+      // Functional update — the server roundtrip may overlap with other edits.
+      setForm((prev) =>
+        prev.interests.some((i) => i.toLowerCase() === tag)
+          ? prev
+          : { ...prev, interests: [...prev.interests, tag] },
+      );
+      setTagDraft("");
+      setTagError(null);
+      setSummaryError(null);
+      // Other pages list tags too — flag shared data as mutated so their next
+      // load picks the new tag up, without reloading this page.
+      markDataMutated();
+    } finally {
+      setTagSaving(false);
+    }
   };
 
   const onSubmit = async (event: React.FormEvent) => {
@@ -279,9 +327,18 @@ export default function CreatePartyPage({
       }
 
       // Link selected interest tags by id (best effort — metadata only).
-      const tagIds = form.interests
+      // Custom typed tags were created server-side on add; re-ensure just in case.
+      const presetTagIds = form.interests
         .map((name) => tags.find((tag) => tag.name === name)?.id)
         .filter((id): id is string => id !== undefined);
+      const customTagIds = (
+        await Promise.all(
+          form.interests
+            .filter((name) => !tags.some((tag) => tag.name === name))
+            .map((name) => ensureTagId(supabase, name)),
+        )
+      ).filter((id): id is string => id !== undefined);
+      const tagIds = [...presetTagIds, ...customTagIds];
       if (tagIds.length > 0) {
         const { error: tagsError } = await supabase
           .from("parties_tags")
@@ -305,6 +362,8 @@ export default function CreatePartyPage({
 
   const resolvedLocation =
     form.locationPreset === MEETING_OTHER ? form.location.trim() : form.locationPreset;
+
+  const customInterests = form.interests.filter((name) => !tags.some((tag) => tag.name === name));
 
   const mapCenter =
     PRESET_COORDS[
@@ -433,6 +492,7 @@ export default function CreatePartyPage({
                     placeholder="What's the plan? Skill level, what to bring, สำหรับมือใหม่ก็มาได้…"
                     rows={4}
                     maxLength={500}
+                    className="h-32"
                   />
                 </Field>
               </CardContent>
@@ -653,10 +713,10 @@ export default function CreatePartyPage({
               </CardHeader>
               <CardContent className="flex flex-col gap-2 pt-0">
                 <p className="text-sm text-muted-foreground">
-                  Help people find this plan through matching — pick what fits.
+                  Help people find this plan through matching — pick what fits, or add your own.
                 </p>
                 <div className="flex flex-wrap gap-1.5" role="group" aria-label="Interests">
-                  {tags.map((tag) => {
+                  {[...tags, ...customInterests.map((name) => ({ id: name, name }))].map((tag) => {
                     const active = form.interests.includes(tag.name);
                     return (
                       <button
@@ -683,6 +743,44 @@ export default function CreatePartyPage({
                     );
                   })}
                 </div>
+                <div className="flex gap-2">
+                  <label htmlFor="field-customTag" className="sr-only">
+                    Add an interest
+                  </label>
+                  <Input
+                    id="field-customTag"
+                    value={tagDraft}
+                    onChange={(event) => {
+                      setTagDraft(event.target.value);
+                      setTagError(null);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        void addInterest(tagDraft);
+                      }
+                    }}
+                    placeholder="Add a tag…"
+                    maxLength={24}
+                    autoComplete="off"
+                    className="h-8"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={tagSaving}
+                    onClick={() => void addInterest(tagDraft)}
+                  >
+                    <Plus data-icon="inline-start" aria-hidden="true" />
+                    Add
+                  </Button>
+                </div>
+                {tagError ? (
+                  <p role="alert" className="text-xs font-medium text-destructive">
+                    {tagError}
+                  </p>
+                ) : null}
               </CardContent>
             </Card>
           </div>
@@ -709,14 +807,31 @@ export default function CreatePartyPage({
               <CalendarPlus data-icon="inline-start" aria-hidden="true" />
               {submitting ? "Publishing…" : "Create Party"}
             </Button>
-            <p className="text-xs text-muted-foreground">
-              The plan is published to CONNEX — other students can find and join it.
-            </p>
           </div>
         </form>
       </div>
     </>
   );
+}
+
+/** Find or create a tag by its normalized name; null if it can't be ensured. */
+async function ensureTagId(
+  supabase: SupabaseClient<Database>,
+  name: string,
+): Promise<string | null> {
+  const existing = await supabase.from("tags").select("id").eq("name", name).maybeSingle();
+  let tagId = existing.data?.id;
+  if (!tagId) {
+    const inserted = await supabase.from("tags").insert({ name }).select("id").single();
+    if (inserted.error) {
+      // Lost an insert race — the tag exists now; re-read it.
+      const again = await supabase.from("tags").select("id").eq("name", name).maybeSingle();
+      tagId = again.data?.id;
+    } else {
+      tagId = inserted.data.id;
+    }
+  }
+  return tagId ?? null;
 }
 
 function Field({
