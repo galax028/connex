@@ -1,5 +1,6 @@
 import type { AppProps } from "next/app";
 import { Inter, Lora, Ubuntu_Mono } from "next/font/google";
+import { useRouter } from "next/router";
 import { AppShell } from "@/components/app-shell";
 import "@/styles/globals.css";
 
@@ -19,13 +20,16 @@ const fontMono = Ubuntu_Mono({
   variable: "--font-mono",
 });
 
+const PAGE_SHELL_EXEMPT = new Set(["/signin"]);
+
 export default function App({ Component, pageProps }: AppProps) {
-  return (
-    <AppShell>
-      <Component
-        className={`${fontSans.variable} ${fontSerif.variable} ${fontMono.variable} antialiased`}
-        {...pageProps}
-      />
-    </AppShell>
+  const router = useRouter();
+  const component = (
+    <Component
+      className={`${fontSans.variable} ${fontSerif.variable} ${fontMono.variable} antialiased`}
+      {...pageProps}
+    />
   );
+  if (PAGE_SHELL_EXEMPT.has(router.pathname)) return component;
+  return <AppShell>{component}</AppShell>;
 }

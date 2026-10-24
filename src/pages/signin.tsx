@@ -1,8 +1,12 @@
 import { useState } from "react";
 import type { GetServerSideProps } from "next";
+import Head from "next/head";
+import Image from "next/image";
 import { useRouter } from "next/router";
+import { Button } from "@/components/ui/button";
 import { createBrowserClient } from "@/lib/supabase/client";
 import { createUserServerClient } from "@/lib/supabase/server";
+import { CircleAlert } from "lucide-react";
 
 export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
   const supabase = createUserServerClient(req, res);
@@ -54,33 +58,66 @@ export default function Login() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-zinc-50 px-6 dark:bg-black">
-      <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        <h1 className="text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
-          Sign in to CONNEX
-        </h1>
-        <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-          Use your Chulalongkorn University Google account to continue.
-        </p>
+    <>
+      <Head>
+        <title>CONNEX · Sign in</title>
+      </Head>
 
-        {(oauthError ?? error) ? (
-          <p
-            role="alert"
-            className="mt-4 rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300"
+      <main className="flex min-h-dvh flex-col items-center justify-center gap-8 px-4 py-16 text-center">
+        <header className="flex flex-col items-center gap-4">
+          <Image
+            src="/images/logo/logo-full-light.svg"
+            alt="CONNEX"
+            width={2028}
+            height={555}
+            priority
+            className="h-10 w-auto dark:hidden"
+          />
+          <Image
+            src="/images/logo/logo-full-dark.svg"
+            alt=""
+            aria-hidden="true"
+            width={2028}
+            height={555}
+            priority
+            className="hidden h-10 w-auto dark:block"
+          />
+          <div className="flex flex-col gap-1">
+            <h1 className="font-heading heading-1 font-semibold tracking-tight">Find your crew</h1>
+            <p className="text-sm text-muted-foreground">
+              Sign in with your Chulalongkorn University Google account to continue.
+            </p>
+          </div>
+        </header>
+
+        <div className="flex w-full max-w-sm flex-col gap-4 rounded-xl bg-card p-6 text-left shadow-sm ring-1 ring-foreground/10">
+          {(oauthError ?? error) ? (
+            <p
+              role="alert"
+              className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3.5 py-2.5 text-sm text-destructive"
+            >
+              <CircleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+              {oauthError ?? error}
+            </p>
+          ) : null}
+
+          <Button
+            type="button"
+            size="lg"
+            className="h-11 w-full"
+            onClick={signInWithGoogle}
+            disabled={isSubmitting}
+            aria-busy={isSubmitting}
           >
-            {oauthError ?? error}
-          </p>
-        ) : null}
+            {isSubmitting ? "Signing in…" : "Continue with Google"}
+          </Button>
 
-        <button
-          type="button"
-          onClick={signInWithGoogle}
-          disabled={isSubmitting}
-          className="mt-6 h-12 w-full rounded-full bg-zinc-950 px-5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-950 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200 dark:focus-visible:outline-white"
-        >
-          {isSubmitting ? "Signing in…" : "Continue with Google"}
-        </button>
-      </div>
-    </main>
+          <p className="text-center text-xs text-muted-foreground">
+            Only <span className="font-medium text-foreground">student.chula.ac.th</span> accounts
+            can sign in.
+          </p>
+        </div>
+      </main>
+    </>
   );
 }
