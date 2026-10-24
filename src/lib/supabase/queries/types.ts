@@ -104,3 +104,26 @@ export type ProfileSummary = {
   profileUrl: string;
   tags: { id: string; name: string }[];
 };
+
+export type PartyChatMessageResult = {
+  id: string;
+  party_id: string;
+  user_id: string;
+  created_at: string;
+  content: string;
+  user_profiles: {
+    fullname: string;
+    nickname: string | null;
+    profile_url: string;
+  } | null;
+};
+
+export type PartyChatMessage = {
+  id: string;
+  userId: string;
+  content: string;
+  createdAt: string;
+  senderName: string;
+  senderNickname: string | null;
+  senderProfileUrl: string;
+};

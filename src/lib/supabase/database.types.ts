@@ -2,6 +2,7 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
 export type Database = {
+  
   "public": {
           Tables: {
             "faculties": {
@@ -16,18 +17,18 @@ export type Database = {
                     "code"?: string,"created_at"?: string,"id"?: never,"name"?: string,"updated_at"?: string
                   }
                   Relationships: [
-
+                    
                   ]
                 },"parties": {
                   Row: {
-                    "approval_required": boolean,"category_id": string | null,"created_at": string,"description": string | null,"estimated_cost": number | null,"id": string,"location": string | null,"max_slots": number | null,"name": string,"organiser_id": string,"taken_slots": number | null,"time_end": string | null,"time_start": string,"updated_at": string
+                    "approval_required": boolean,"category_id": string | null,"created_at": string,"description": string | null,"estimated_cost": number | null,"id": string,"location": string | null,"location_coordinates": unknown,"location_description": string | null,"max_slots": number | null,"name": string,"organiser_id": string,"taken_slots": number | null,"time_end": string | null,"time_start": string,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "approval_required"?: boolean,"category_id"?: string | null,"created_at"?: string,"description"?: string | null,"estimated_cost"?: number | null,"id"?: string,"location"?: string | null,"max_slots"?: number | null,"name": string,"organiser_id": string,"taken_slots"?: number | null,"time_end"?: string | null,"time_start": string,"updated_at"?: string
+                    "approval_required"?: boolean,"category_id"?: string | null,"created_at"?: string,"description"?: string | null,"estimated_cost"?: number | null,"id"?: string,"location"?: string | null,"location_coordinates"?: unknown,"location_description"?: string | null,"max_slots"?: number | null,"name": string,"organiser_id": string,"taken_slots"?: number | null,"time_end"?: string | null,"time_start": string,"updated_at"?: string
                   }
                   Update: {
-                    "approval_required"?: boolean,"category_id"?: string | null,"created_at"?: string,"description"?: string | null,"estimated_cost"?: number | null,"id"?: string,"location"?: string | null,"max_slots"?: number | null,"name"?: string,"organiser_id"?: string,"taken_slots"?: number | null,"time_end"?: string | null,"time_start"?: string,"updated_at"?: string
+                    "approval_required"?: boolean,"category_id"?: string | null,"created_at"?: string,"description"?: string | null,"estimated_cost"?: number | null,"id"?: string,"location"?: string | null,"location_coordinates"?: unknown,"location_description"?: string | null,"max_slots"?: number | null,"name"?: string,"organiser_id"?: string,"taken_slots"?: number | null,"time_end"?: string | null,"time_start"?: string,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -35,6 +36,12 @@ export type Database = {
       columns: ["category_id"]
 isOneToOne: false
       referencedRelation: "party_categories"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "parties_organiser_id_fkey"
+      columns: ["organiser_id"]
+isOneToOne: false
+      referencedRelation: "user_profiles"
       referencedColumns: ["id"]
     }
                   ]
@@ -82,6 +89,12 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "parties"
       referencedColumns: ["id"]
+    },{
+      foreignKeyName: "parties_users_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "user_profiles"
+      referencedColumns: ["id"]
     }
                   ]
                 },"party_categories": {
@@ -96,7 +109,33 @@ isOneToOne: false
                     "created_at"?: string,"id"?: string,"name"?: string,"updated_at"?: string
                   }
                   Relationships: [
-
+                    
+                  ]
+                },"party_chat_messages": {
+                  Row: {
+                    "content": string,"created_at": string,"id": string,"party_id": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "content": string,"created_at"?: string,"id"?: string,"party_id": string,"user_id": string
+                  }
+                  Update: {
+                    "content"?: string,"created_at"?: string,"id"?: string,"party_id"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "party_chat_messages_party_id_fkey"
+      columns: ["party_id"]
+isOneToOne: false
+      referencedRelation: "parties"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "party_chat_messages_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "user_profiles"
+      referencedColumns: ["id"]
+    }
                   ]
                 },"tags": {
                   Row: {
@@ -110,7 +149,7 @@ isOneToOne: false
                     "created_at"?: string,"id"?: string,"name"?: string,"updated_at"?: string
                   }
                   Relationships: [
-
+                    
                   ]
                 },"user_profiles": {
                   Row: {
@@ -149,6 +188,12 @@ isOneToOne: false
       columns: ["tag_id"]
 isOneToOne: false
       referencedRelation: "tags"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "users_tags_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "user_profiles"
       referencedColumns: ["id"]
     }
                   ]
