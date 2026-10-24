@@ -1,11 +1,10 @@
-import Link from "next/link";
-import Head from "next/head";
-import type { GetServerSideProps } from "next";
-import { useRouter } from "next/router";
 import * as React from "react";
-import { Check, Eye, EyeOff, LogOut, Pencil, Plus, Settings2, X } from "lucide-react";
-
+import type { GetServerSideProps } from "next";
+import Head from "next/head";
+import Link from "next/link";
+import { useRouter } from "next/router";
 import { ParticipantAvatar } from "@/components/participant-avatar";
+import { EmptyState, ErrorState } from "@/components/state-views";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,23 +12,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { EmptyState, ErrorState } from "@/components/state-views";
-import {
-  formatEnrolmentYear,
-  isPast,
-  plural,
-} from "@/lib/format";
+import { formatEnrolmentYear, isPast, plural } from "@/lib/format";
 import { createBrowserClient } from "@/lib/supabase/client";
-import { getTags } from "@/lib/supabase/queries/get-tags";
 import { getPartiesByOrganiser } from "@/lib/supabase/queries/get-parties-by-organiser";
 import { getPartiesByParticipant } from "@/lib/supabase/queries/get-parties-by-participant";
 import { getProfile } from "@/lib/supabase/queries/get-profile";
-import type {
-  PartySummary,
-  ProfileSummary,
-} from "@/lib/supabase/queries/types";
+import { getTags } from "@/lib/supabase/queries/get-tags";
+import type { PartySummary, ProfileSummary } from "@/lib/supabase/queries/types";
 import { createUserServerClient } from "@/lib/supabase/server";
 import { cn } from "cn";
+import { Check, Eye, EyeOff, LogOut, Pencil, Plus, Settings2, X } from "lucide-react";
 
 export interface MyProfileProps {
   error: boolean;
@@ -40,10 +32,7 @@ export interface MyProfileProps {
   joined?: PartySummary[];
 }
 
-export const getServerSideProps: GetServerSideProps<MyProfileProps> = async ({
-  req,
-  res,
-}) => {
+export const getServerSideProps: GetServerSideProps<MyProfileProps> = async ({ req, res }) => {
   const supabase = createUserServerClient(req, res);
   const {
     data: { user },
@@ -210,11 +199,7 @@ export default function MyProfilePage({
     try {
       const supabase = createBrowserClient();
       // tags.name is UNIQUE and case-sensitive — normalize before lookup/insert.
-      const existing = await supabase
-        .from("tags")
-        .select("id")
-        .eq("name", tag)
-        .maybeSingle();
+      const existing = await supabase.from("tags").select("id").eq("name", tag).maybeSingle();
       let tagId = existing.data?.id as string | undefined;
       if (!tagId) {
         const inserted = await supabase.from("tags").insert({ name: tag }).select("id").single();
@@ -314,11 +299,7 @@ export default function MyProfilePage({
                         </p>
                       </div>
                       {editingProfile ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={exitProfileEdit}
-                        >
+                        <Button variant="outline" size="sm" onClick={exitProfileEdit}>
                           <X data-icon="inline-start" aria-hidden="true" />
                           Cancel
                         </Button>
@@ -354,12 +335,18 @@ export default function MyProfilePage({
                           aria-describedby={bioError ? "bio-error" : undefined}
                         />
                         {bioError ? (
-                          <p id="bio-error" role="alert" className="text-xs font-medium text-destructive">
+                          <p
+                            id="bio-error"
+                            role="alert"
+                            className="text-xs font-medium text-destructive"
+                          >
                             {bioError}
                           </p>
                         ) : null}
                         <div className="flex justify-end">
-                          <span className="text-xs text-muted-foreground">{(bioDraft ?? "").length}/280</span>
+                          <span className="text-xs text-muted-foreground">
+                            {(bioDraft ?? "").length}/280
+                          </span>
                         </div>
                       </div>
                     ) : (
@@ -375,7 +362,10 @@ export default function MyProfilePage({
                     <ul className="flex flex-wrap gap-1.5" aria-label="Your interests">
                       {me.tags.map((tag) => (
                         <li key={tag.id}>
-                          <Badge variant="outline" className={cn("border-primary gap-1", editingProfile && "pr-1")}>
+                          <Badge
+                            variant="outline"
+                            className={cn("gap-1 border-primary", editingProfile && "pr-1")}
+                          >
                             {tag.name}
                             {editingProfile ? (
                               <button
@@ -383,7 +373,7 @@ export default function MyProfilePage({
                                 disabled={saving}
                                 onClick={() => removeTag(tag.name)}
                                 aria-label={`Remove interest ${tag.name}`}
-                                className="rounded-full p-0.5 outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50"
+                                className="rounded-full p-0.5 transition-colors outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50"
                               >
                                 <X aria-hidden="true" className="size-3" />
                               </button>
@@ -411,7 +401,7 @@ export default function MyProfilePage({
                               type="button"
                               disabled={saving}
                               onClick={() => addTag(tag)}
-                              className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+                              className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
                             >
                               <Plus aria-hidden="true" className="mr-0.5 inline size-3" />
                               {tag}
@@ -466,8 +456,16 @@ export default function MyProfilePage({
             </Card>
 
             <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-2">
-              <StatTile label="Joined" value={plural(joined.length, "party", "parties")} href="/my" />
-              <StatTile label="Created" value={plural(organised.length, "party", "parties")} href="/my" />
+              <StatTile
+                label="Joined"
+                value={plural(joined.length, "party", "parties")}
+                href="/my"
+              />
+              <StatTile
+                label="Created"
+                value={plural(organised.length, "party", "parties")}
+                href="/my"
+              />
             </div>
 
             <section aria-labelledby="my-parties-heading" className="flex flex-col gap-2">
@@ -562,7 +560,7 @@ function PartyRow({ party, creator }: { party: PartySummary; creator?: boolean }
   return (
     <Link
       href={`/parties/${party.id}`}
-      className="flex items-center gap-3 rounded-xl border bg-card px-3.5 py-2.5 outline-none transition-colors hover:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+      className="flex items-center gap-3 rounded-xl border bg-card px-3.5 py-2.5 transition-colors outline-none hover:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
     >
       <div className="flex min-w-0 flex-1 flex-col">
         <span className="truncate text-sm font-medium">{party.title}</span>
@@ -578,7 +576,7 @@ function StatTile({ label, value, href }: { label: string; value: string; href: 
   return (
     <Link
       href={href}
-      className="flex flex-col gap-0.5 rounded-xl border bg-card px-4 py-3 outline-none transition-colors hover:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+      className="flex flex-col gap-0.5 rounded-xl border bg-card px-4 py-3 transition-colors outline-none hover:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
     >
       <span className="text-xs text-muted-foreground">{label}</span>
       <span className="font-heading heading-3 font-semibold">{value}</span>

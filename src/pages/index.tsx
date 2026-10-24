@@ -8,16 +8,13 @@ import { PartyCard } from "@/components/party-card";
 import { EmptyState, ErrorState } from "@/components/state-views";
 import { Button } from "@/components/ui/button";
 import { rankMatches } from "@/lib/ai/interpret";
-import { createUserServerClient } from "@/lib/supabase/server";
+import { isPast } from "@/lib/format";
+import { approvedParticipants } from "@/lib/participants";
 import { getParties } from "@/lib/supabase/queries/get-parties";
 import { getPartyCategories } from "@/lib/supabase/queries/get-party-categories";
 import { getProfile } from "@/lib/supabase/queries/get-profile";
-import type {
-  PartySummary,
-  ProfileSummary,
-} from "@/lib/supabase/queries/types";
-import { isPast } from "@/lib/format";
-import { approvedParticipants } from "@/lib/participants";
+import type { PartySummary, ProfileSummary } from "@/lib/supabase/queries/types";
+import { createUserServerClient } from "@/lib/supabase/server";
 import { ChevronRight, Plus, Search } from "lucide-react";
 
 export interface HomeProps {
@@ -28,10 +25,7 @@ export interface HomeProps {
   categories?: string[];
 }
 
-export const getServerSideProps: GetServerSideProps<HomeProps> = async ({
-  req,
-  res,
-}) => {
+export const getServerSideProps: GetServerSideProps<HomeProps> = async ({ req, res }) => {
   const supabase = createUserServerClient(req, res);
   const {
     data: { user },
@@ -93,10 +87,7 @@ export default function HomePage({
   const upcoming = React.useMemo(
     () =>
       [...discoverable]
-        .sort(
-          (a, b) =>
-            new Date(a.timeStart).getTime() - new Date(b.timeStart).getTime(),
-        )
+        .sort((a, b) => new Date(a.timeStart).getTime() - new Date(b.timeStart).getTime())
         .slice(0, 6),
     [discoverable],
   );
@@ -136,7 +127,10 @@ export default function HomePage({
           <div className="flex min-w-0 flex-col gap-8">
             <section aria-labelledby="ai-picks-heading" className="flex flex-col gap-3">
               <div className="flex items-center justify-between gap-2">
-                <h2 id="ai-picks-heading" className="flex items-center gap-2 font-heading heading-3 font-semibold">
+                <h2
+                  id="ai-picks-heading"
+                  className="flex items-center gap-2 font-heading heading-3 font-semibold"
+                >
                   Picked for you
                   <AiBadge />
                 </h2>
@@ -147,15 +141,8 @@ export default function HomePage({
               {aiPicks.length > 0 ? (
                 <ul className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-2">
                   {aiPicks.map(({ party, reasons }) => (
-                    <li
-                      key={party.id}
-                      className="flex w-[17.5rem] shrink-0 snap-start"
-                    >
-                      <PartyCard
-                        party={party}
-                        aiReason={reasons[0]}
-                        className="h-full"
-                      />
+                    <li key={party.id} className="flex w-[17.5rem] shrink-0 snap-start">
+                      <PartyCard party={party} aiReason={reasons[0]} className="h-full" />
                     </li>
                   ))}
                 </ul>

@@ -1,8 +1,6 @@
 import type { AppProps } from "next/app";
 import { Inter, Lora, Ubuntu_Mono } from "next/font/google";
-
 import { AppShell } from "@/components/app-shell";
-
 import "@/styles/globals.css";
 
 const fontSans = Inter({

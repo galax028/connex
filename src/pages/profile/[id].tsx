@@ -1,24 +1,21 @@
-import Link from "next/link";
-import Head from "next/head";
-import type { GetServerSideProps } from "next";
-import { useRouter } from "next/router";
 import * as React from "react";
-import { ArrowLeft, EyeOff, Handshake } from "lucide-react";
+import type { GetServerSideProps } from "next";
+import Head from "next/head";
+import Link from "next/link";
+import { useRouter } from "next/router";
 import { ParticipantAvatar } from "@/components/participant-avatar";
+import { EmptyState, ErrorState } from "@/components/state-views";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { EmptyState, ErrorState } from "@/components/state-views";
 import { formatEnrolmentYear, formatWhen, isPast } from "@/lib/format";
 import { getPartiesByOrganiser } from "@/lib/supabase/queries/get-parties-by-organiser";
 import { getPartiesByParticipant } from "@/lib/supabase/queries/get-parties-by-participant";
 import { getProfile } from "@/lib/supabase/queries/get-profile";
-import type {
-  PartySummary,
-  ProfileSummary,
-} from "@/lib/supabase/queries/types";
+import type { PartySummary, ProfileSummary } from "@/lib/supabase/queries/types";
 import { createUserServerClient } from "@/lib/supabase/server";
 import { cn } from "cn";
+import { ArrowLeft, EyeOff, Handshake } from "lucide-react";
 
 export interface StudentProfileProps {
   notFound: boolean;
@@ -161,15 +158,17 @@ export default function StudentProfilePage({
                   })}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">
-                  No interests added yet.
-                </p>
+                <p className="text-sm text-muted-foreground">No interests added yet.</p>
               )}
               {shared.length > 0 ? (
                 <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
                   <Handshake aria-hidden="true" className="size-4 text-primary" />
-                  You both like {shared.slice(0, 2).map((tag) => tag.name).join(" and ")} — an easy
-                  icebreaker.
+                  You both like{" "}
+                  {shared
+                    .slice(0, 2)
+                    .map((tag) => tag.name)
+                    .join(" and ")}{" "}
+                  — an easy icebreaker.
                 </p>
               ) : (
                 <p className="text-sm text-muted-foreground">
@@ -199,7 +198,11 @@ export default function StudentProfilePage({
                 <ul className="flex flex-col gap-1.5">
                   {past.map((party) => (
                     <li key={party.id} className="opacity-75">
-                      <PartyLinkRow partyId={party.id} title={party.title} when={formatWhen(party.timeStart)} />
+                      <PartyLinkRow
+                        partyId={party.id}
+                        title={party.title}
+                        when={formatWhen(party.timeStart)}
+                      />
                     </li>
                   ))}
                 </ul>
@@ -217,15 +220,7 @@ export default function StudentProfilePage({
   );
 }
 
-function PartyLinkRow({
-  partyId,
-  title,
-  when,
-}: {
-  partyId: string;
-  title: string;
-  when: string;
-}) {
+function PartyLinkRow({ partyId, title, when }: { partyId: string; title: string; when: string }) {
   return (
     <div className="flex items-center gap-3 rounded-xl border bg-card px-3.5 py-2.5">
       <div className="flex min-w-0 flex-1 flex-col">

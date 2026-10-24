@@ -1,14 +1,13 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
-
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CircleAlert, CircleCheck, Compass, Inbox } from "lucide-react";
 import { cn } from "cn";
+import { CircleAlert, CircleCheck, Compass, Inbox } from "lucide-react";
 
 export function PartyCardSkeleton() {
   return (
-    <div className="rounded-xl bg-card ring-1 ring-foreground/10 p-4 flex flex-col gap-3">
+    <div className="flex flex-col gap-3 rounded-xl bg-card p-4 ring-1 ring-foreground/10">
       <div className="flex items-center gap-2">
         <Skeleton className="h-5 w-16 rounded-full" />
         <Skeleton className="h-5 w-10 rounded-full" />
@@ -51,7 +50,7 @@ export function EmptyState({
     <div
       className={cn(
         "flex flex-col items-center gap-2 rounded-xl border border-dashed border-border bg-muted/40 px-6 py-10 text-center",
-        className
+        className,
       )}
     >
       <div aria-hidden="true" className="text-muted-foreground">
@@ -117,7 +116,7 @@ export function ErrorState({
     <EmptyState
       icon={<CircleAlert className="size-8" strokeWidth={1.5} />}
       title={title}
-      body={      body ?? "Try again in a moment — if it keeps happening, the service may be down."}
+      body={body ?? "Try again in a moment — if it keeps happening, the service may be down."}
       actions={
         onRetry ? (
           <Button variant="outline" onClick={onRetry}>
@@ -145,10 +144,13 @@ export function SuccessBanner({
       role="status"
       className={cn(
         "flex items-start gap-3 rounded-xl border border-emerald-600/30 bg-emerald-500/10 px-4 py-3",
-        className
+        className,
       )}
     >
-      <CircleCheck aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-emerald-700 dark:text-emerald-400" />
+      <CircleCheck
+        aria-hidden="true"
+        className="mt-0.5 size-5 shrink-0 text-emerald-700 dark:text-emerald-400"
+      />
       <div className="flex flex-col gap-1">
         <p className="text-sm font-medium text-foreground">{title}</p>
         {body ? <p className="text-sm text-muted-foreground">{body}</p> : null}

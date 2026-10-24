@@ -1,6 +1,5 @@
-import { Sparkles } from "lucide-react";
-
 import { Badge } from "@/components/ui/badge";
+import { Sparkles } from "lucide-react";
 
 /**
  * Marks content that came from the simulated AI pipeline. The tooltip text is

@@ -53,7 +53,6 @@ export async function searchParties(
     .order("created_at", { ascending: false })
     .order("created_at", { referencedTable: "parties_tags" })
     .range(offset, offset + limit - 1);
-
   if (error) {
     console.error("[queries.searchParties]: ", error);
     return null;

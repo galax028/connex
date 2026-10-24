@@ -1,6 +1,5 @@
-import type { DayWithin, PartyFilters, SortOption, TimeOfDay } from "@/lib/filters";
-import type { PartySummary, ProfileSummary } from "@/lib/supabase/queries/types";
 import { inferArea } from "@/lib/areas";
+import type { DayWithin, PartyFilters, SortOption, TimeOfDay } from "@/lib/filters";
 import {
   bangkokDayKey,
   bangkokHour,
@@ -12,6 +11,7 @@ import {
   spotsLeft,
 } from "@/lib/format";
 import { approvedParticipants } from "@/lib/participants";
+import type { PartySummary, ProfileSummary } from "@/lib/supabase/queries/types";
 
 /**
  * Prototype note: this module *simulates* natural-language interpretation with
@@ -21,13 +21,7 @@ import { approvedParticipants } from "@/lib/participants";
  */
 
 export type ChipField =
-  | "category"
-  | "dayWithin"
-  | "timeOfDay"
-  | "budgetMax"
-  | "area"
-  | "minSpots"
-  | "keyword";
+  "category" | "dayWithin" | "timeOfDay" | "budgetMax" | "area" | "minSpots" | "keyword";
 
 export interface InterpretationChip {
   id: string;
@@ -45,34 +39,129 @@ export interface Interpretation {
 /** Keys are DB category names (`party_categories.name`). */
 const CATEGORY_WORDS: Record<string, string[]> = {
   Sports: [
-    "badminton", "แบด", "ตีแบด", "football", "ฟุตบอล", "basketball", "บาส",
-    "running", "วิ่ง", "muay", "มวย", "volleyball", "วอลเลย์", "bowling",
-    "โบว์ลิ่ง", "gym", "fitness", "tennis", "swim", "ว่ายน้ำ", "sport", "กีฬา",
+    "badminton",
+    "แบด",
+    "ตีแบด",
+    "football",
+    "ฟุตบอล",
+    "basketball",
+    "บาส",
+    "running",
+    "วิ่ง",
+    "muay",
+    "มวย",
+    "volleyball",
+    "วอลเลย์",
+    "bowling",
+    "โบว์ลิ่ง",
+    "gym",
+    "fitness",
+    "tennis",
+    "swim",
+    "ว่ายน้ำ",
+    "sport",
+    "กีฬา",
   ],
   Food: [
-    "food", "กิน", "ข้าว", "หมูกระทะ", "hotpot", "สุกี้", "bbq", "บุฟเฟ่ต์",
-    "buffet", "ชานม", "bubble tea", "dessert", "ขนม", "restaurant", "ร้านอาหาร",
-    "sushi", "ramen", "กะเพรา", "ส้มตำ", "k-bbq", "หารกิน", "มื้อ",
+    "food",
+    "กิน",
+    "ข้าว",
+    "หมูกระทะ",
+    "hotpot",
+    "สุกี้",
+    "bbq",
+    "บุฟเฟ่ต์",
+    "buffet",
+    "ชานม",
+    "bubble tea",
+    "dessert",
+    "ขนม",
+    "restaurant",
+    "ร้านอาหาร",
+    "sushi",
+    "ramen",
+    "กะเพรา",
+    "ส้มตำ",
+    "k-bbq",
+    "หารกิน",
+    "มื้อ",
   ],
   Gaming: [
-    "game", "เกม", "valorant", "lol", "league", "board game", "บอร์ดเกม",
-    "dota", "playstation", "switch", "esport", "gaming", "minecraft", "genshin",
+    "game",
+    "เกม",
+    "valorant",
+    "lol",
+    "league",
+    "board game",
+    "บอร์ดเกม",
+    "dota",
+    "playstation",
+    "switch",
+    "esport",
+    "gaming",
+    "minecraft",
+    "genshin",
   ],
   Studying: [
-    "study", "ติว", "สอบ", "exam", "อ่านหนังสือ", "ห้องสมุด", "library",
-    "homework", "การบ้าน", "assignment", "cram", "project", "งานกลุ่ม", "final",
+    "study",
+    "ติว",
+    "สอบ",
+    "exam",
+    "อ่านหนังสือ",
+    "ห้องสมุด",
+    "library",
+    "homework",
+    "การบ้าน",
+    "assignment",
+    "cram",
+    "project",
+    "งานกลุ่ม",
+    "final",
   ],
   Arts: [
-    "movie", "หนัง", "cinema", "photo", "ถ่ายรูป", "art", "ศิลปะ", "draw",
-    "วาด", "museum", "พิพิธภัณฑ์", "craft", "ghibli",
+    "movie",
+    "หนัง",
+    "cinema",
+    "photo",
+    "ถ่ายรูป",
+    "art",
+    "ศิลปะ",
+    "draw",
+    "วาด",
+    "museum",
+    "พิพิธภัณฑ์",
+    "craft",
+    "ghibli",
   ],
   Music: [
-    "karaoke", "คาราโอเกะ", "sing", "ร้องเพลง", "concert", "คอนเสิร์ต",
-    "music", "เพลง", "guitar", "กีตาร์", "band",
+    "karaoke",
+    "คาราโอเกะ",
+    "sing",
+    "ร้องเพลง",
+    "concert",
+    "คอนเสิร์ต",
+    "music",
+    "เพลง",
+    "guitar",
+    "กีตาร์",
+    "band",
   ],
   Sightseeing: [
-    "hike", "เดินป่า", "travel", "เที่ยว", "market", "ตลาดนัด", "walk",
-    "เดินเล่น", "park", "สวน", "bike", "จักรยาน", "trip", "beach", "ทะเล",
+    "hike",
+    "เดินป่า",
+    "travel",
+    "เที่ยว",
+    "market",
+    "ตลาดนัด",
+    "walk",
+    "เดินเล่น",
+    "park",
+    "สวน",
+    "bike",
+    "จักรยาน",
+    "trip",
+    "beach",
+    "ทะเล",
   ],
   Other: [],
 };
@@ -80,7 +169,10 @@ const CATEGORY_WORDS: Record<string, string[]> = {
 const DAY_WORDS: Array<[DayWithin, string[]]> = [
   ["today", ["today", "tonight", "วันนี้", "คืนนี้", "เย็นนี้"]],
   ["tomorrow", ["tomorrow", "พรุ่งนี้"]],
-  ["weekend", ["weekend", "สุดสัปดาห์", "เสาร์อาทิตย์", "saturday", "sunday", "เสาร์", "อาทิตย์นี้"]],
+  [
+    "weekend",
+    ["weekend", "สุดสัปดาห์", "เสาร์อาทิตย์", "saturday", "sunday", "เสาร์", "อาทิตย์นี้"],
+  ],
   ["this_week", ["this week", "สัปดาห์นี้", "อาทิตย์นี้", "next week", "สัปดาห์หน้า"]],
 ];
 
@@ -102,14 +194,81 @@ const AREA_WORDS: Array<[string, string[]]> = [
 ];
 
 const STOPWORDS = new Set([
-  "the", "a", "an", "and", "or", "for", "with", "at", "in", "on", "to", "of",
-  "me", "my", "we", "us", "i", "want", "wanna", "looking", "find", "anyone",
-  "any", "who", "can", "join", "does", "do", "is", "are", "this", "that",
-  "under", "over", "near", "around", "about", "free", "baht", "people",
-  "person", "something", "anything", "activity", "activities", "budget",
-  "กลุ่ม", "หา", "รบกวน", "ใคร", "อยาก", "ไป", "มา", "กับ", "เรา", "ฉัน", "ผม",
-  "ช่วย", "ด้วย", "กัน", "คน", "ที่", "และ", "หรือ", "เลย", "นะ", "ค่ะ", "ครับ",
-  "ฟรี", "บาท", "งบ", "กิจกรรม", "อะไร", "อะไรก็ได้", "อะไรก็ได้แหละ",
+  "the",
+  "a",
+  "an",
+  "and",
+  "or",
+  "for",
+  "with",
+  "at",
+  "in",
+  "on",
+  "to",
+  "of",
+  "me",
+  "my",
+  "we",
+  "us",
+  "i",
+  "want",
+  "wanna",
+  "looking",
+  "find",
+  "anyone",
+  "any",
+  "who",
+  "can",
+  "join",
+  "does",
+  "do",
+  "is",
+  "are",
+  "this",
+  "that",
+  "under",
+  "over",
+  "near",
+  "around",
+  "about",
+  "free",
+  "baht",
+  "people",
+  "person",
+  "something",
+  "anything",
+  "activity",
+  "activities",
+  "budget",
+  "กลุ่ม",
+  "หา",
+  "รบกวน",
+  "ใคร",
+  "อยาก",
+  "ไป",
+  "มา",
+  "กับ",
+  "เรา",
+  "ฉัน",
+  "ผม",
+  "ช่วย",
+  "ด้วย",
+  "กัน",
+  "คน",
+  "ที่",
+  "และ",
+  "หรือ",
+  "เลย",
+  "นะ",
+  "ค่ะ",
+  "ครับ",
+  "ฟรี",
+  "บาท",
+  "งบ",
+  "กิจกรรม",
+  "อะไร",
+  "อะไรก็ได้",
+  "อะไรก็ได้แหละ",
 ]);
 
 function includesAny(haystack: string, needles: string[]): boolean {
@@ -157,9 +316,7 @@ function extractMinPeople(text: string): number | undefined {
 function extractKeywords(text: string): string[] {
   // \p{M} keeps Thai vowels/tone marks attached to their word.
   const tokens = text.toLowerCase().match(/[\p{L}\p{N}\p{M}]+/gu) ?? [];
-  return tokens
-    .filter((w) => w.length >= 2 && !STOPWORDS.has(w) && !/^\d+$/.test(w))
-    .slice(0, 6);
+  return tokens.filter((w) => w.length >= 2 && !STOPWORDS.has(w) && !/^\d+$/.test(w)).slice(0, 6);
 }
 
 export function interpretQuery(rawQuery: string): Interpretation {
@@ -171,16 +328,12 @@ export function interpretQuery(rawQuery: string): Interpretation {
   // Thai compound tokens don't resurface as redundant keyword chips.
   const consumed: string[] = [];
 
-  const categories = Object.keys(CATEGORY_WORDS).filter((c) =>
-    includesAny(q, CATEGORY_WORDS[c])
-  );
+  const categories = Object.keys(CATEGORY_WORDS).filter((c) => includesAny(q, CATEGORY_WORDS[c]));
   if (categories.length > 0) {
     const term = firstMatch(q, CATEGORY_WORDS[categories[0]]);
     if (term) consumed.push(term);
     if (categories.length > 1)
-      notes.push(
-        `Several categories matched — using ${categories[0]}. Remove the chip to widen.`
-      );
+      notes.push(`Several categories matched — using ${categories[0]}. Remove the chip to widen.`);
     filters.category = categories[0];
     chips.push({
       id: "category",
@@ -191,8 +344,21 @@ export function interpretQuery(rawQuery: string): Interpretation {
     // Keep specific activities ("แบด", "karaoke") as an extra keyword chip so
     // the category chip alone doesn't blur e.g. badminton into all sports.
     const GENERIC_TERMS = new Set([
-      "sport", "sports", "กีฬา", "food", "ข้าว", "game", "games", "เกม",
-      "study", "studying", "art", "arts", "music", "เพลง", "travel",
+      "sport",
+      "sports",
+      "กีฬา",
+      "food",
+      "ข้าว",
+      "game",
+      "games",
+      "เกม",
+      "study",
+      "studying",
+      "art",
+      "arts",
+      "music",
+      "เพลง",
+      "travel",
     ]);
     if (term && !GENERIC_TERMS.has(term.toLowerCase()) && term.trim().length >= 2) {
       chips.push({
@@ -235,7 +401,7 @@ export function interpretQuery(rawQuery: string): Interpretation {
   const budget = extractBudget(q);
   if (budget !== undefined) {
     const budgetMatch = q.match(
-      /(?:under|below|max|less than|not over|ไม่เกิน|งบ(?:ไม่เกิน)?|ประมาณ|around)\s*(?:฿|baht|บาท)?\s*\d{2,5}|(?:฿|บาท|baht)\s*\d{2,5}|\d{2,5}\s*(?:฿|baht|บาท)|\bfree\b|ฟรี|(?:งบ|budget)\s*\d{2,5}/i
+      /(?:under|below|max|less than|not over|ไม่เกิน|งบ(?:ไม่เกิน)?|ประมาณ|around)\s*(?:฿|baht|บาท)?\s*\d{2,5}|(?:฿|บาท|baht)\s*\d{2,5}|\d{2,5}\s*(?:฿|baht|บาท)|\bfree\b|ฟรี|(?:งบ|budget)\s*\d{2,5}/i,
     );
     if (budgetMatch) consumed.push(budgetMatch[0]);
     filters.budgetMax = budget;
@@ -282,7 +448,7 @@ export function interpretQuery(rawQuery: string): Interpretation {
 
   if (chips.length === 0) {
     notes.push(
-      "Prototype could not identify concrete constraints from that. Showing everything — try mentioning a category, day, area or budget."
+      "Prototype could not identify concrete constraints from that. Showing everything — try mentioning a category, day, area or budget.",
     );
   } else {
     notes.push("Simulated interpretation (prototype, not live AI) — edit or remove any chip.");
@@ -296,7 +462,7 @@ export function interpretQuery(rawQuery: string): Interpretation {
 export function partyMatchesDay(
   party: PartySummary,
   dayWithin: DayWithin,
-  now = Date.now()
+  now = Date.now(),
 ): boolean {
   const start = new Date(party.timeStart).getTime();
   if (start < now - 60_000) return false;
@@ -350,7 +516,7 @@ export function applyFilters(
   parties: PartySummary[],
   filters: PartyFilters,
   viewerId: string,
-  now = Date.now()
+  now = Date.now(),
 ): PartySummary[] {
   const keywords = (filters.text ?? "").split(" ").filter(Boolean);
   return parties.filter((party) => {
@@ -393,7 +559,7 @@ export function rankMatches(
   parties: PartySummary[],
   filters: PartyFilters,
   viewer: ProfileSummary | undefined,
-  now = Date.now()
+  now = Date.now(),
 ): RankedParty[] {
   const keywords = (filters.text ?? "").split(" ").filter(Boolean);
   const viewerTags = new Set((viewer?.tags ?? []).map((tag) => tag.name.toLowerCase()));
@@ -418,7 +584,7 @@ export function rankMatches(
         reasons.push(
           party.budgetPerPerson === null
             ? "Free activity"
-            : `Within budget (${formatBudget(party.budgetPerPerson)} ≤ ${formatBudget(filters.budgetMax)})`
+            : `Within budget (${formatBudget(party.budgetPerPerson)} ≤ ${formatBudget(filters.budgetMax)})`,
         );
       } else {
         score -= 40;
@@ -467,23 +633,16 @@ export function rankMatches(
 export function sortParties(
   parties: PartySummary[],
   sort: SortOption,
-  ranked?: Map<string, number>
+  ranked?: Map<string, number>,
 ): PartySummary[] {
   const copy = [...parties];
   if (sort === "soonest") {
-    return copy.sort(
-      (a, b) => new Date(a.timeStart).getTime() - new Date(b.timeStart).getTime()
-    );
+    return copy.sort((a, b) => new Date(a.timeStart).getTime() - new Date(b.timeStart).getTime());
   }
   if (sort === "popularity") {
-    return copy.sort(
-      (a, b) =>
-        approvedParticipants(b).length - approvedParticipants(a).length
-    );
+    return copy.sort((a, b) => approvedParticipants(b).length - approvedParticipants(a).length);
   }
-  return copy.sort(
-    (a, b) => (ranked?.get(b.id) ?? 0) - (ranked?.get(a.id) ?? 0)
-  );
+  return copy.sort((a, b) => (ranked?.get(b.id) ?? 0) - (ranked?.get(a.id) ?? 0));
 }
 
 /* ------------------------------ chip editing ------------------------------- */

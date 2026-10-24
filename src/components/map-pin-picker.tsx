@@ -1,11 +1,10 @@
 import * as React from "react";
-import * as L from "leaflet";
-import "leaflet/dist/leaflet.css";
-import { CircleCheck, MapPin as MapPinIcon, X } from "lucide-react";
-
 import { Button } from "@/components/ui/button";
 import type { MapPin } from "@/lib/filters";
 import { cn } from "cn";
+import * as L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import { CircleCheck, MapPin as MapPinIcon, X } from "lucide-react";
 
 /** Chulalongkorn University area — where the map opens when nothing is chosen yet. */
 export const DEFAULT_MAP_CENTER: MapPin = { lat: 13.738, lng: 100.532 };
@@ -124,7 +123,7 @@ export function MapPinPicker({
           <MapPinIcon
             aria-hidden="true"
             className={cn(
-              "absolute left-1/2 top-1/2 size-7 -translate-x-1/2 -translate-y-full drop-shadow-md transition-colors",
+              "absolute top-1/2 left-1/2 size-7 -translate-x-1/2 -translate-y-full drop-shadow-md transition-colors",
               value
                 ? "fill-primary stroke-background text-primary"
                 : "fill-muted-foreground/70 stroke-background text-muted-foreground/70",
@@ -152,13 +151,7 @@ export function MapPinPicker({
   );
 }
 
-export function MapPinPreview({
-  pin,
-  className,
-}: {
-  pin: MapPin;
-  className?: string;
-}) {
+export function MapPinPreview({ pin, className }: { pin: MapPin; className?: string }) {
   const { lat, lng } = pin;
   const containerRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -188,7 +181,10 @@ export function MapPinPreview({
       ref={containerRef}
       role="img"
       aria-label={`Map showing the pinned meeting spot at ${lat.toFixed(5)}, ${lng.toFixed(5)}`}
-      className={cn("isolate h-40 w-full overflow-hidden rounded-xl border border-border", className)}
+      className={cn(
+        "isolate h-40 w-full overflow-hidden rounded-xl border border-border",
+        className,
+      )}
     />
   );
 }

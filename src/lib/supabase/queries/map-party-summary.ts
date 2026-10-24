@@ -1,9 +1,5 @@
-import type {
-  PartyParticipant,
-  PartyResult,
-  PartySummary,
-} from "@/lib/supabase/queries/types";
 import { mapParticipant } from "@/lib/supabase/queries/map-participant";
+import type { PartyParticipant, PartyResult, PartySummary } from "@/lib/supabase/queries/types";
 
 /**
  * Postgres `point` columns round-trip through PostgREST as the string

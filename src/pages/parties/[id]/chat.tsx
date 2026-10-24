@@ -1,18 +1,17 @@
-import Link from "next/link";
-import Head from "next/head";
-import type { GetServerSideProps } from "next";
-import { useRouter } from "next/router";
 import * as React from "react";
-import { ArrowLeft, Send } from "lucide-react";
-
-import { Button } from "@/components/ui/button";
+import type { GetServerSideProps } from "next";
+import Head from "next/head";
+import Link from "next/link";
+import { useRouter } from "next/router";
 import { EmptyState } from "@/components/state-views";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatMessageTime, plural } from "@/lib/format";
 import { approvedParticipants } from "@/lib/participants";
 import { getParty } from "@/lib/supabase/queries/get-party";
 import type { PartyDetail } from "@/lib/supabase/queries/types";
 import { createUserServerClient } from "@/lib/supabase/server";
+import { ArrowLeft, Send } from "lucide-react";
 
 export interface PartyChatProps {
   notFound: boolean;
@@ -185,8 +184,8 @@ function PartyChatView({ party, userId }: { party: PartyDetail; userId: string }
           <div className="min-w-0 flex-1">
             <h1 className="truncate font-heading heading-4 font-semibold">{party.title}</h1>
             <p className="text-xs text-muted-foreground">
-              {plural(accepted.length, "member", "members")} · prototype chat, messages stay in
-              your browser
+              {plural(accepted.length, "member", "members")} · prototype chat, messages stay in your
+              browser
             </p>
           </div>
         </div>

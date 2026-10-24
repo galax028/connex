@@ -1,4 +1,4 @@
-import type { PartySummary, PartyParticipant } from "@/lib/supabase/queries/types";
+import type { PartyParticipant, PartySummary } from "@/lib/supabase/queries/types";
 
 export type MyStatus = "creator" | "joined" | "requested" | "none";
 

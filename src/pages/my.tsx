@@ -1,19 +1,18 @@
-import Link from "next/link";
-import Head from "next/head";
-import type { GetServerSideProps } from "next";
 import * as React from "react";
-import { Plus } from "lucide-react";
-
+import type { GetServerSideProps } from "next";
+import Head from "next/head";
+import Link from "next/link";
 import { PartyCard } from "@/components/party-card";
 import { EmptyState, ErrorState } from "@/components/state-views";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { createUserServerClient } from "@/lib/supabase/server";
+import { isPast } from "@/lib/format";
+import { deriveMyStatus } from "@/lib/participants";
 import { getPartiesByOrganiser } from "@/lib/supabase/queries/get-parties-by-organiser";
 import { getPartiesByParticipant } from "@/lib/supabase/queries/get-parties-by-participant";
 import type { PartySummary } from "@/lib/supabase/queries/types";
-import { isPast } from "@/lib/format";
-import { deriveMyStatus } from "@/lib/participants";
+import { createUserServerClient } from "@/lib/supabase/server";
+import { Plus } from "lucide-react";
 
 export interface MyActivitiesProps {
   error: boolean;
@@ -21,10 +20,7 @@ export interface MyActivitiesProps {
   parties?: PartySummary[];
 }
 
-export const getServerSideProps: GetServerSideProps<MyActivitiesProps> = async ({
-  req,
-  res,
-}) => {
+export const getServerSideProps: GetServerSideProps<MyActivitiesProps> = async ({ req, res }) => {
   const supabase = createUserServerClient(req, res);
   const {
     data: { user },
@@ -51,11 +47,7 @@ export const getServerSideProps: GetServerSideProps<MyActivitiesProps> = async (
 
 type TabKey = "upcoming" | "past";
 
-export default function MyActivitiesPage({
-  error,
-  userId = "",
-  parties = [],
-}: MyActivitiesProps) {
+export default function MyActivitiesPage({ error, userId = "", parties = [] }: MyActivitiesProps) {
   const [tab, setTab] = React.useState<TabKey>("upcoming");
   const now = React.useMemo(() => new Date().getTime(), []);
 
@@ -64,14 +56,10 @@ export default function MyActivitiesPage({
 
   const lists: Record<TabKey, PartySummary[]> = React.useMemo(
     () => ({
-      upcoming: parties
-        .filter((party) => !isPast(party.timeStart, now))
-        .sort(bySoonest),
-      past: parties
-        .filter((party) => isPast(party.timeStart, now))
-        .sort((a, b) => bySoonest(b, a)),
+      upcoming: parties.filter((party) => !isPast(party.timeStart, now)).sort(bySoonest),
+      past: parties.filter((party) => isPast(party.timeStart, now)).sort((a, b) => bySoonest(b, a)),
     }),
-    [parties, now]
+    [parties, now],
   );
 
   const renderCards = (cards: PartySummary[]) => (

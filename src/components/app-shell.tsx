@@ -1,10 +1,9 @@
+import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import * as React from "react";
-import { CalendarDays, Compass, Plus, Search, User } from "lucide-react";
-
 import { Button } from "@/components/ui/button";
 import { cn } from "cn";
+import { CalendarDays, Compass, Plus, Search, User } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/", label: "Home", icon: Compass, exact: true },
@@ -33,10 +32,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         href={item.href}
         aria-current={active ? "page" : undefined}
         className={cn(
-          "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50",
+          "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
           active
             ? "bg-primary/10 text-primary"
-            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground",
         )}
       >
         <Icon aria-hidden="true" className="size-4.5" />
@@ -49,7 +48,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-dvh">
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:text-primary-foreground"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:text-primary-foreground"
       >
         Skip to content
       </a>
@@ -74,10 +73,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </p>
       </aside>
 
-      <main
-        id="main-content"
-        className="w-full px-4 pt-6 pb-32 lg:pt-10 lg:pb-12 lg:pl-68"
-      >
+      <main id="main-content" className="w-full px-4 pt-6 pb-32 lg:pt-10 lg:pb-12 lg:pl-68">
         <div className="mx-auto w-full max-w-xl lg:max-w-4xl">{children}</div>
       </main>
 
@@ -96,8 +92,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               aria-label="Create a party"
               aria-current={router.pathname === "/create" ? "page" : undefined}
               className={cn(
-                "-mt-6 flex size-13 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg outline-none transition-transform focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-95",
-                router.pathname === "/create" && "ring-4 ring-primary/30"
+                "-mt-6 flex size-13 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform outline-none focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-95",
+                router.pathname === "/create" && "ring-4 ring-primary/30",
               )}
             >
               <Plus aria-hidden="true" className="size-6" />
@@ -112,13 +108,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function MobileNavItem({
-  item,
-  pathname,
-}: {
-  item: (typeof NAV_ITEMS)[number];
-  pathname: string;
-}) {
+function MobileNavItem({ item, pathname }: { item: (typeof NAV_ITEMS)[number]; pathname: string }) {
   const active = isActive(pathname, item.href, item.exact);
   const Icon = item.icon!;
   return (
@@ -127,8 +117,8 @@ function MobileNavItem({
         href={item.href}
         aria-current={active ? "page" : undefined}
         className={cn(
-          "flex flex-col items-center gap-0.5 rounded-lg px-1 py-1 text-[0.65rem] font-medium outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50",
-          active ? "text-primary" : "text-muted-foreground hover:text-foreground"
+          "flex flex-col items-center gap-0.5 rounded-lg px-1 py-1 text-[0.65rem] font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+          active ? "text-primary" : "text-muted-foreground hover:text-foreground",
         )}
       >
         <Icon aria-hidden="true" className="size-5" />

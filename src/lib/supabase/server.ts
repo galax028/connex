@@ -1,6 +1,6 @@
-import type { IncomingMessage, ServerResponse } from "http";
 import type { Database } from "@/lib/supabase/database.types";
 import * as supabase from "@supabase/ssr";
+import type { IncomingMessage, ServerResponse } from "http";
 
 /** Minimal request/response shape both API routes and gSSP contexts satisfy. */
 type CookieRequest = IncomingMessage & {
@@ -22,41 +22,29 @@ export function createServerClient(req: CookieRequest, res: CookieResponse) {
  * use this for every server-rendered page read.
  */
 export function createUserServerClient(req: CookieRequest, res: CookieResponse) {
-  return createCookieClient(
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
-    req,
-    res,
-  );
+  return createCookieClient(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!, req, res);
 }
 
-function createCookieClient(
-  key: string,
-  req: CookieRequest,
-  res: CookieResponse,
-) {
+function createCookieClient(key: string, req: CookieRequest, res: CookieResponse) {
   const pendingCookies: { name: string; value: string; options: supabase.CookieOptions }[] = [];
 
-  return supabase.createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    key,
-    {
-      cookies: {
-        getAll() {
-          return Object.entries(req.cookies).map(([name, value]) => ({
-            name,
-            value: value ?? "",
-          }));
-        },
-        setAll(cookiesToSet) {
-          pendingCookies.push(...cookiesToSet);
-          res.setHeader(
-            "Set-Cookie",
-            pendingCookies.map((cookie) => serializeCookie(cookie)),
-          );
-        },
+  return supabase.createServerClient<Database>(process.env.NEXT_PUBLIC_SUPABASE_URL!, key, {
+    cookies: {
+      getAll() {
+        return Object.entries(req.cookies).map(([name, value]) => ({
+          name,
+          value: value ?? "",
+        }));
+      },
+      setAll(cookiesToSet) {
+        pendingCookies.push(...cookiesToSet);
+        res.setHeader(
+          "Set-Cookie",
+          pendingCookies.map((cookie) => serializeCookie(cookie)),
+        );
       },
     },
-  );
+  });
 }
 
 function serializeCookie({

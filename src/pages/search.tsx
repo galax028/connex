@@ -1,11 +1,14 @@
-import Link from "next/link";
-import Head from "next/head";
-import type { GetServerSideProps } from "next";
-import { useRouter } from "next/router";
 import * as React from "react";
-import { Info, RotateCcw, Search, Sparkles, X } from "lucide-react";
-
-import { FilterSheet, DAY_OPTIONS, TIME_OPTIONS, type ManualFilters } from "@/components/filter-sheet";
+import type { GetServerSideProps } from "next";
+import Head from "next/head";
+import Link from "next/link";
+import { useRouter } from "next/router";
+import {
+  DAY_OPTIONS,
+  FilterSheet,
+  type ManualFilters,
+  TIME_OPTIONS,
+} from "@/components/filter-sheet";
 import { PartyCard } from "@/components/party-card";
 import { DiscoverEmptyState, EmptyState, ErrorState } from "@/components/state-views";
 import { Badge } from "@/components/ui/badge";
@@ -21,25 +24,23 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  type InterpretationChip,
   applyFilters,
   chipLabelFor,
   filtersFromChips,
   interpretQuery,
   rankMatches,
   sortParties,
-  type InterpretationChip,
 } from "@/lib/ai/interpret";
 import type { SortOption } from "@/lib/filters";
-import { createUserServerClient } from "@/lib/supabase/server";
+import { formatBudget } from "@/lib/format";
 import { getParties } from "@/lib/supabase/queries/get-parties";
 import { getPartyCategories } from "@/lib/supabase/queries/get-party-categories";
 import { getProfile } from "@/lib/supabase/queries/get-profile";
-import type {
-  PartySummary,
-  ProfileSummary,
-} from "@/lib/supabase/queries/types";
+import type { PartySummary, ProfileSummary } from "@/lib/supabase/queries/types";
+import { createUserServerClient } from "@/lib/supabase/server";
 import { cn } from "cn";
-import { formatBudget } from "@/lib/format";
+import { Info, RotateCcw, Search, Sparkles, X } from "lucide-react";
 
 const SORT_OPTIONS: Array<{ value: SortOption; label: string }> = [
   { value: "relevance", label: "Relevance" },
@@ -63,10 +64,7 @@ export interface SearchProps {
   categories?: string[];
 }
 
-export const getServerSideProps: GetServerSideProps<SearchProps> = async ({
-  req,
-  res,
-}) => {
+export const getServerSideProps: GetServerSideProps<SearchProps> = async ({ req, res }) => {
   const supabase = createUserServerClient(req, res);
   const {
     data: { user },
@@ -161,7 +159,7 @@ export default function SearchPage({
         .split(" ")
         .map((w) => w.trim())
         .filter(Boolean),
-    [text]
+    [text],
   );
 
   const manualResults = React.useMemo(() => {
@@ -169,7 +167,7 @@ export default function SearchPage({
       parties,
       { ...filters, text: manualKeywordList.join(" ") || undefined },
       userId,
-      now
+      now,
     );
     return sortParties(filtered, sort, undefined);
   }, [parties, filters, manualKeywordList, sort, userId, now]);
@@ -179,15 +177,30 @@ export default function SearchPage({
 
   const relaxActions: Array<{ label: string; clear: () => void }> = [];
   if (filters.budgetMax !== undefined)
-    relaxActions.push({ label: "Any budget", clear: () => setFilters((f) => ({ ...f, budgetMax: undefined })) });
+    relaxActions.push({
+      label: "Any budget",
+      clear: () => setFilters((f) => ({ ...f, budgetMax: undefined })),
+    });
   if (filters.dayWithin)
-    relaxActions.push({ label: "Any date", clear: () => setFilters((f) => ({ ...f, dayWithin: undefined })) });
+    relaxActions.push({
+      label: "Any date",
+      clear: () => setFilters((f) => ({ ...f, dayWithin: undefined })),
+    });
   if (filters.minSpots !== undefined)
-    relaxActions.push({ label: "Any group size", clear: () => setFilters((f) => ({ ...f, minSpots: undefined })) });
+    relaxActions.push({
+      label: "Any group size",
+      clear: () => setFilters((f) => ({ ...f, minSpots: undefined })),
+    });
   if (filters.area)
-    relaxActions.push({ label: "Any area", clear: () => setFilters((f) => ({ ...f, area: undefined })) });
+    relaxActions.push({
+      label: "Any area",
+      clear: () => setFilters((f) => ({ ...f, area: undefined })),
+    });
   if (filters.category)
-    relaxActions.push({ label: "All categories", clear: () => setFilters((f) => ({ ...f, category: undefined })) });
+    relaxActions.push({
+      label: "All categories",
+      clear: () => setFilters((f) => ({ ...f, category: undefined })),
+    });
   if (manualKeywordList.length > 0)
     relaxActions.push({ label: "Clear search text", clear: () => setText("") });
 
@@ -245,7 +258,7 @@ export default function SearchPage({
         const index = options.indexOf(c.value);
         const next = options[(index + 1) % options.length];
         return { ...c, value: next, label: chipLabelFor(chip.field, next) };
-      })
+      }),
     );
   };
 
@@ -272,16 +285,15 @@ export default function SearchPage({
       </Head>
       <div className="flex flex-col gap-4">
         <header className="flex flex-col gap-1">
-          <h1 className="font-heading heading-1 font-semibold tracking-tight">Find something to do</h1>
+          <h1 className="font-heading heading-1 font-semibold tracking-tight">
+            Find something to do
+          </h1>
           <p className="text-sm text-muted-foreground">
             Browse everything, or describe your plan in your own words.
           </p>
         </header>
 
-        <Tabs
-          value={mode}
-          onValueChange={(value) => setMode(value === "ai" ? "ai" : "all")}
-        >
+        <Tabs value={mode} onValueChange={(value) => setMode(value === "ai" ? "ai" : "all")}>
           <TabsList className="w-full" aria-label="Search mode">
             <TabsTrigger value="all">All activities</TabsTrigger>
             <TabsTrigger value="ai" className="gap-1.5">
@@ -297,7 +309,7 @@ export default function SearchPage({
                 <div className="relative flex-1">
                   <Search
                     aria-hidden="true"
-                    className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                    className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
                   />
                   <Input
                     value={text}
@@ -362,7 +374,9 @@ export default function SearchPage({
                   ) : null}
                   {filters.budgetMax !== undefined ? (
                     <FilterChip
-                      label={filters.budgetMax === 0 ? "Free" : `≤ ${formatBudget(filters.budgetMax)}`}
+                      label={
+                        filters.budgetMax === 0 ? "Free" : `≤ ${formatBudget(filters.budgetMax)}`
+                      }
                       onRemove={() => setFilters((f) => ({ ...f, budgetMax: undefined }))}
                     />
                   ) : null}
@@ -383,7 +397,11 @@ export default function SearchPage({
                   ) : null}
                 </div>
               ) : (
-                <div className="flex items-center gap-2 overflow-x-auto pb-1" role="group" aria-label="Quick category filters">
+                <div
+                  className="flex items-center gap-2 overflow-x-auto pb-1"
+                  role="group"
+                  aria-label="Quick category filters"
+                >
                   <Button
                     variant={filters.category ? "outline" : "default"}
                     size="sm"
@@ -457,7 +475,11 @@ export default function SearchPage({
                 <div className="flex gap-2">
                   <Button type="submit" disabled={aiProcessing} className="flex-1">
                     <Sparkles data-icon="inline-start" aria-hidden="true" />
-                    {aiProcessing ? "Interpreting…" : chips.length > 0 ? "Refine search" : "Interpret my request"}
+                    {aiProcessing
+                      ? "Interpreting…"
+                      : chips.length > 0
+                        ? "Refine search"
+                        : "Interpret my request"}
                   </Button>
                   {chips.length > 0 ? (
                     <Button
@@ -507,7 +529,11 @@ export default function SearchPage({
               ) : null}
 
               {aiProcessing ? (
-                <div role="status" aria-label="Interpreting your request" className="flex flex-col gap-3">
+                <div
+                  role="status"
+                  aria-label="Interpreting your request"
+                  className="flex flex-col gap-3"
+                >
                   <p className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Sparkles aria-hidden="true" className="size-4 animate-pulse text-primary" />
                     Reading your request… (simulated, prototype)
@@ -528,7 +554,7 @@ export default function SearchPage({
                           <span
                             className={cn(
                               "flex items-center rounded-l-full border border-r-0 border-border bg-background pl-1",
-                              CYCLE_OPTIONS[chip.field] ? "pr-0" : "pr-2.5"
+                              CYCLE_OPTIONS[chip.field] ? "pr-0" : "pr-2.5",
                             )}
                           >
                             {CYCLE_OPTIONS[chip.field] ? (
@@ -537,7 +563,7 @@ export default function SearchPage({
                                 onClick={() => cycleChip(chip)}
                                 title="Tap to change"
                                 aria-label={`${chip.label} — tap to change value`}
-                                className="rounded-l-full px-2 py-1 text-xs font-medium outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+                                className="rounded-l-full px-2 py-1 text-xs font-medium transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
                               >
                                 {chip.label}
                               </button>
@@ -549,7 +575,7 @@ export default function SearchPage({
                             type="button"
                             onClick={() => removeChip(chip.id)}
                             aria-label={`Remove filter ${chip.label}`}
-                            className="flex items-center rounded-r-full border border-border bg-background pr-2 outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+                            className="flex items-center rounded-r-full border border-border bg-background pr-2 transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
                           >
                             <X aria-hidden="true" className="size-3" />
                           </button>
@@ -598,7 +624,12 @@ export default function SearchPage({
                         <div className="flex flex-col items-center gap-2">
                           <div className="flex flex-wrap justify-center gap-1.5">
                             {aiRelaxActions.map((action) => (
-                              <Button key={action.label} variant="outline" size="sm" onClick={action.onClick}>
+                              <Button
+                                key={action.label}
+                                variant="outline"
+                                size="sm"
+                                onClick={action.onClick}
+                              >
                                 {action.label}
                               </Button>
                             ))}
@@ -626,7 +657,7 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
         type="button"
         onClick={onRemove}
         aria-label={`Remove filter ${label}`}
-        className="rounded-full p-0.5 outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50"
+        className="rounded-full p-0.5 transition-colors outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50"
       >
         <X aria-hidden="true" className="size-3" />
       </button>

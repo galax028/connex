@@ -1,7 +1,7 @@
 import * as React from "react";
+import type { GetServerSideProps } from "next";
 import dynamic from "next/dynamic";
 import Head from "next/head";
-import type { GetServerSideProps } from "next";
 import { useRouter } from "next/router";
 import { PartyCard } from "@/components/party-card";
 import { ErrorState } from "@/components/state-views";
@@ -25,13 +25,10 @@ import type { MapPin } from "@/lib/filters";
 import { daysFromToday, toBangkokIso } from "@/lib/format";
 import { createBrowserClient } from "@/lib/supabase/client";
 import { getPartyCategories } from "@/lib/supabase/queries/get-party-categories";
-import { getTags } from "@/lib/supabase/queries/get-tags";
 import { getProfile } from "@/lib/supabase/queries/get-profile";
-import type {
-  PartySummary,
-  ProfileSummary,
-} from "@/lib/supabase/queries/types";
+import { getTags } from "@/lib/supabase/queries/get-tags";
 import { formatPointColumn } from "@/lib/supabase/queries/map-party-summary";
+import type { PartySummary, ProfileSummary } from "@/lib/supabase/queries/types";
 import { createUserServerClient } from "@/lib/supabase/server";
 import { cn } from "cn";
 import { ArrowLeft, CalendarPlus, Eye } from "lucide-react";
@@ -52,10 +49,7 @@ export interface CreatePartyProps {
   tags?: { id: string; name: string }[];
 }
 
-export const getServerSideProps: GetServerSideProps<CreatePartyProps> = async ({
-  req,
-  res,
-}) => {
+export const getServerSideProps: GetServerSideProps<CreatePartyProps> = async ({ req, res }) => {
   const supabase = createUserServerClient(req, res);
   const {
     data: { user },
@@ -103,11 +97,11 @@ const MEETING_PRESETS = [
 const PRESET_COORDS: Record<string, MapPin> = {
   "On campus": { lat: 13.7345, lng: 100.5303 },
   "Sam Yan": { lat: 13.7266, lng: 100.528 },
-  "Siam": { lat: 13.7465, lng: 100.5345 },
-  "Ari": { lat: 13.7773, lng: 100.543 },
-  "Silom": { lat: 13.7234, lng: 100.532 },
-  "Sukhumvit": { lat: 13.7367, lng: 100.5603 },
-  "Chatuchak": { lat: 13.7999, lng: 100.5501 },
+  Siam: { lat: 13.7465, lng: 100.5345 },
+  Ari: { lat: 13.7773, lng: 100.543 },
+  Silom: { lat: 13.7234, lng: 100.532 },
+  Sukhumvit: { lat: 13.7367, lng: 100.5603 },
+  Chatuchak: { lat: 13.7999, lng: 100.5501 },
   "Phra Nakhon": { lat: 13.754, lng: 100.499 },
 };
 
@@ -241,7 +235,8 @@ export default function CreatePartyPage({
         category_id: categoryId ?? null,
         time_start: toBangkokIso(form.date, form.time),
         time_end: form.endTime ? toBangkokIso(form.date, form.endTime) : null,
-        location: form.locationPreset === MEETING_OTHER ? form.location.trim() : form.locationPreset,
+        location:
+          form.locationPreset === MEETING_OTHER ? form.location.trim() : form.locationPreset,
         estimated_cost: paid ? Number(form.budget) : null,
         approval_required: form.requiresApproval,
         max_slots: form.crewMode === "limited" ? Number(form.capacity) : null,
@@ -251,9 +246,10 @@ export default function CreatePartyPage({
       // PostgREST serializes `point` as "(x,y)" with x=lng, y=lat. If the
       // coordinate write is rejected, publish without the pin (non-critical).
       const attempt = async (withPin: boolean) => {
-        const payload = withPin && pin
-          ? { ...basePayload, location_coordinates: formatPointColumn(pin) }
-          : basePayload;
+        const payload =
+          withPin && pin
+            ? { ...basePayload, location_coordinates: formatPointColumn(pin) }
+            : basePayload;
         return supabase.from("parties").insert(payload).select("id").single();
       };
 
@@ -276,7 +272,9 @@ export default function CreatePartyPage({
         status: "approved",
       });
       if (joinError) {
-        setSummaryError("The plan was published but joining it failed — try again from the plan page.");
+        setSummaryError(
+          "The plan was published but joining it failed — try again from the plan page.",
+        );
       }
 
       // Link selected interest tags by id (best effort — metadata only).
@@ -408,9 +406,7 @@ export default function CreatePartyPage({
                       className="w-full"
                       aria-invalid={!!errors.category}
                     >
-                      <SelectValue>
-                        {form.category || "Select a category"}
-                      </SelectValue>
+                      <SelectValue>{form.category || "Select a category"}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {categories.map((category) => (
@@ -699,11 +695,7 @@ export default function CreatePartyPage({
                 How your card appears to other students — it updates as you fill the form. This
                 preview isn’t clickable.
               </p>
-              <PartyCard
-                party={previewParty}
-                getMyStatus={() => "creator"}
-                nonInteractive
-              />
+              <PartyCard party={previewParty} getMyStatus={() => "creator"} nonInteractive />
               <Badge variant="outline" className="self-start">
                 {form.requiresApproval ? "Host approves requests" : "Instant join"}
               </Badge>

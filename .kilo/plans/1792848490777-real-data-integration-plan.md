@@ -26,15 +26,15 @@ Pages Router conventions and all AGENTS.md rules apply (no App Router, no tests)
    - `REVOKE UPDATE ON parties FROM authenticated;`
    - `GRANT UPDATE (taken_slots) ON parties TO authenticated;`
    - `CREATE POLICY update_parties_taken_slots ON parties FOR UPDATE TO authenticated
-     USING (true) WITH CHECK (true);` — row policy opens all rows, column grants restrict
+USING (true) WITH CHECK (true);` — row policy opens all rows, column grants restrict
      writable columns to `taken_slots` only.
    - Keep `update_parties` (organiser) as-is: harmless while privileges are
      column-scoped; widening grants for a future party-edit UI is out of scope.
-   App-side rule: after **every** `parties_users` mutation, refetch the party and set
-   `taken_slots` to its approved-row count (**recompute-and-set** — never `+1/−1`
-   read-modify-write, which loses updates under concurrency). Accepted trade-off: any
-   authenticated member can write `taken_slots` values that pass the CHECK — prototype
-   level, deliberate consequence of choosing app-side over the trigger.
+     App-side rule: after **every** `parties_users` mutation, refetch the party and set
+     `taken_slots` to its approved-row count (**recompute-and-set** — never `+1/−1`
+     read-modify-write, which loses updates under concurrency). Accepted trade-off: any
+     authenticated member can write `taken_slots` values that pass the CHECK — prototype
+     level, deliberate consequence of choosing app-side over the trigger.
 6. **`get-user.ts` must be created** — `/api/user.ts` already imports it; the missing file
    breaks the build today.
 
@@ -114,21 +114,21 @@ Pages Router conventions and all AGENTS.md rules apply (no App Router, no tests)
    logic from seed). `participantCountLabel(participants, maxSlots)`.
 4. `src/components/category-chip.tsx` → DB category names; icon map for the 8 names.
 5. `src/components/party-card.tsx` → props `{ party: PartySummary; getMyStatus?; aiReason?;`
-    tone?; chatHref?; chatDisabled?; nonInteractive? }`; avatars from `party.participants`;
-    capacity label from `maxSlots`; budget handles `null`; `categoryName` `NULL` renders an
-    "Other" chip.
+   tone?; chatHref?; chatDisabled?; nonInteractive? }`; avatars from `party.participants`;
+ capacity label from `maxSlots`; budget handles `null`; `categoryName` `NULL` renders an
+   "Other" chip.
 6. `src/lib/ai/interpret.ts` → operate on `PartySummary`:
-    category filter by `categoryName`, day/time-of-day via Bangkok helpers on `timeStart`,
-    `budgetMax: 0` matches `NULL` cost only, `minSpots` from `maxSlots − approved count`,
-    keyword match over `name/description/location/tags[].name`, ranking uses viewer `tags`
-    overlap (viewer is `ProfileSummary`), `sortParties` by `timeStart` / participant count.
-    Keep the simulated interpretation (OpenRouter is out of scope).
+   category filter by `categoryName`, day/time-of-day via Bangkok helpers on `timeStart`,
+   `budgetMax: 0` matches `NULL` cost only, `minSpots` from `maxSlots − approved count`,
+   keyword match over `name/description/location/tags[].name`, ranking uses viewer `tags`
+   overlap (viewer is `ProfileSummary`), `sortParties` by `timeStart` / participant count.
+   Keep the simulated interpretation (OpenRouter is out of scope).
 7. `src/components/filter-sheet.tsx` → accept `categories: string[]` prop (DB names);
-    area presets stay the static 8 (On campus, Sam Yan, Siam, Ari, Silom, Sukhumvit,
-    Chatuchak, Phra Nakhon).
+   area presets stay the static 8 (On campus, Sam Yan, Siam, Ari, Silom, Sukhumvit,
+   Chatuchak, Phra Nakhon).
 8. Extract `inferArea` + `AREA_HINTS` from `create.tsx` into `src/lib/areas.ts` — real
-    `PartySummary` has no area, so `PartyCard` (display line), `interpret` (area filter),
-    and the create preview all derive it from `party.location` at render time.
+   `PartySummary` has no area, so `PartyCard` (display line), `interpret` (area filter),
+   and the create preview all derive it from `party.location` at render time.
 9. `src/components/app-shell.tsx`: update the sidebar copy (no longer "all data is mock").
 10. `src/components/map-pin-picker.tsx`: relocate the `MapPin` type here (or into
     `src/lib/filters.ts`) so it survives `data/types.ts` deletion.
@@ -141,74 +141,76 @@ it both authenticates and queries; its cookie handler refreshes expired session 
 ```ts
 export const getServerSideProps: GetServerSideProps<Props> = async ({ req, res }) => {
   const supabase = createUserServerClient(req, res);
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) return { redirect: { destination: "/signin", permanent: false } };
   // query with the same `supabase` instance; null result → { props: { error: true, ... } }
 };
 ```
 
 1. **`/` index.tsx** — gSSP: `getParties`, `getProfile(user.id)`, `getPartyCategories`.
-    Client: discoverable = not past + not organiser + no own row; AI picks via
-    `rankMatches(discoverable, {}, me)`; upcoming sort by `timeStart`; category counts
-    from fetched list. Drop `hydrated` gates (SSR data renders immediately);
-    `error` prop → `ErrorState`.
+   Client: discoverable = not past + not organiser + no own row; AI picks via
+   `rankMatches(discoverable, {}, me)`; upcoming sort by `timeStart`; category counts
+   from fetched list. Drop `hydrated` gates (SSR data renders immediately);
+   `error` prop → `ErrorState`.
 2. **`/search`** — gSSP: same triple as index. All filtering/ranking stays client-side.
-    URL param init unchanged but `?category=` now carries the DB name (e.g. `Food`,
-    URL-encoded); the home-page category links generate matching hrefs; validate the param
-    against the fetched `categories` prop; `CYCLE_OPTIONS`/quick category buttons use the
-    same prop. Update the AI info line copy (data is real now, interpretation still simulated).
+   URL param init unchanged but `?category=` now carries the DB name (e.g. `Food`,
+   URL-encoded); the home-page category links generate matching hrefs; validate the param
+   against the fetched `categories` prop; `CYCLE_OPTIONS`/quick category buttons use the
+   same prop. Update the AI info line copy (data is real now, interpretation still simulated).
 3. **`/my`** — gSSP: `getPartiesByParticipant(user.id)` + `getPartiesByOrganiser(user.id)`;
-    dedupe by id; status via `deriveMyStatus`; upcoming/past split client-side by
-    `timeStart`. Requested parties show the pending badge (own pending rows are visible
-    via RLS).
+   dedupe by id; status via `deriveMyStatus`; upcoming/past split client-side by
+   `timeStart`. Requested parties show the pending badge (own pending rows are visible
+   via RLS).
 4. **`/parties/[id]`** — gSSP: `getParty(id)`; not-found → empty-state prop; also
-    `getProfile(organiser_id)` is embedded via participants/creator link (fetch organiser
-    profile separately for the organiser card). Mutations (browser client):
-    - join: insert `parties_users` `{status: approval_required ? 'pending' : 'approved'}`,
-      then set `parties.taken_slots` to the recomputed approved count (allowed by the
-      `update_parties_taken_slots` policy + column grant, Locked decision 5); pre-check
-      capacity client-side for UX, DB CHECK for races; on constraint error show
-      "party is full".
-    - cancel (own pending) / leave (own approved): DELETE own row, then recompute
-      `taken_slots` the same way.
-    - accept: UPDATE row → `'approved'` + recompute `taken_slots`; decline: DELETE row
-      (organiser only — RLS enforces; organiser CAN update `parties`).
-    - delete party: DELETE from `parties` (RLS organiser-only), then redirect `/`.
-    Remove the 1.5 s auto-approve timer and its copy. Pending-requests section stays
-    gated on `isCreator` (RLS already hides others' pending rows). Keep the
-    created-party toast (sessionStorage flag) and dialogs.
+   `getProfile(organiser_id)` is embedded via participants/creator link (fetch organiser
+   profile separately for the organiser card). Mutations (browser client):
+   - join: insert `parties_users` `{status: approval_required ? 'pending' : 'approved'}`,
+     then set `parties.taken_slots` to the recomputed approved count (allowed by the
+     `update_parties_taken_slots` policy + column grant, Locked decision 5); pre-check
+     capacity client-side for UX, DB CHECK for races; on constraint error show
+     "party is full".
+   - cancel (own pending) / leave (own approved): DELETE own row, then recompute
+     `taken_slots` the same way.
+   - accept: UPDATE row → `'approved'` + recompute `taken_slots`; decline: DELETE row
+     (organiser only — RLS enforces; organiser CAN update `parties`).
+   - delete party: DELETE from `parties` (RLS organiser-only), then redirect `/`.
+     Remove the 1.5 s auto-approve timer and its copy. Pending-requests section stays
+     gated on `isCreator` (RLS already hides others' pending rows). Keep the
+     created-party toast (sessionStorage flag) and dialogs.
 5. **`/parties/[id]/chat`** — gSSP: `getParty(id)`; `canChat = organiser or own approved row`
-    (server-side gate). Messages via a small local hook `useLocalMessages(partyId)`
-    (localStorage keyed per party, ported from the store's `myMessages`; seeded mock
-    conversations disappear — chats start empty, existing empty state covers it). Keep
-    prototype copy.
+   (server-side gate). Messages via a small local hook `useLocalMessages(partyId)`
+   (localStorage keyed per party, ported from the store's `myMessages`; seeded mock
+   conversations disappear — chats start empty, existing empty state covers it). Keep
+   prototype copy.
 6. **`/profile` (own)** — gSSP: `getProfile(user.id)` + `getTags`. Mutations (browser
-    client): bio → UPDATE `user_profiles.biography`; add tag → normalize (trim +
-    lowercase, `tags.name` is UNIQUE and case-sensitive), lookup id in fetched tags
-    (INSERT into `tags` first if missing — RLS allows), then INSERT `users_tags`;
-    remove tag → DELETE `users_tags` row. Keep 12-tag cap + ≤24 char validation client-side.
-    Privacy toggles: no DB columns — local state with localStorage persistence, sidebar
-    preview unchanged; retitle card from "(mock)" to a local-setting note. Update header
-    copy (no longer "fixed mock user"). Add a **Sign out** control (sidebar/settings):
-    `supabase.auth.signOut()` from the browser client, then `router.push("/signin")` —
-    also required to switch accounts for the RLS validation below.
+   client): bio → UPDATE `user_profiles.biography`; add tag → normalize (trim +
+   lowercase, `tags.name` is UNIQUE and case-sensitive), lookup id in fetched tags
+   (INSERT into `tags` first if missing — RLS allows), then INSERT `users_tags`;
+   remove tag → DELETE `users_tags` row. Keep 12-tag cap + ≤24 char validation client-side.
+   Privacy toggles: no DB columns — local state with localStorage persistence, sidebar
+   preview unchanged; retitle card from "(mock)" to a local-setting note. Update header
+   copy (no longer "fixed mock user"). Add a **Sign out** control (sidebar/settings):
+   `supabase.auth.signOut()` from the browser client, then `router.push("/signin")` —
+   also required to switch accounts for the RLS validation below.
 7. **`/profile/[id]`** — gSSP: `getProfile(id)`, `getPartiesByOrganiser(id)`,
-    `getPartiesByParticipant(id)` (filter out self-organised for "Joining"), plus
-    `getProfile(user.id)` for shared-interest highlights. Past split by `timeStart`.
-    Note: RLS hides other users' *pending* rows, so another student's "Joining" list
-    naturally shows only confirmed memberships — desired privacy behavior.
+   `getPartiesByParticipant(id)` (filter out self-organised for "Joining"), plus
+   `getProfile(user.id)` for shared-interest highlights. Past split by `timeStart`.
+   Note: RLS hides other users' _pending_ rows, so another student's "Joining" list
+   naturally shows only confirmed memberships — desired privacy behavior.
 8. **`/create`** — gSSP: `getPartyCategories` + `getTags` (interest chips come from DB
-    tags now, not `INTEREST_TAGS`). Submit (browser client): INSERT `parties`
-    (name, description, category_id by name lookup, `time_start`/`time_end` via
-    `toBangkokIso`, location, `location_coordinates` from the pin (verify PostgREST point
-    format; drop pin silently if it fails), `estimated_cost` (free → NULL),
-    `approval_required`, `max_slots` (limited → number ≥ 2, unlimited → NULL),
-    `taken_slots` default 1), INSERT own `parties_users` approved row, INSERT
-    `parties_tags` for selected tag ids. Keep preset meeting points + "Other" text field,
-    `CREATED_PARTY_FLAG`, redirect, and toast. Remove the 6 s mock-joiner timer.
+   tags now, not `INTEREST_TAGS`). Submit (browser client): INSERT `parties`
+   (name, description, category_id by name lookup, `time_start`/`time_end` via
+   `toBangkokIso`, location, `location_coordinates` from the pin (verify PostgREST point
+   format; drop pin silently if it fails), `estimated_cost` (free → NULL),
+   `approval_required`, `max_slots` (limited → number ≥ 2, unlimited → NULL),
+   `taken_slots` default 1), INSERT own `parties_users` approved row, INSERT
+   `parties_tags` for selected tag ids. Keep preset meeting points + "Other" text field,
+   `CREATED_PARTY_FLAG`, redirect, and toast. Remove the 6 s mock-joiner timer.
 9. **`/signin`** — already real; add gSSP redirect to `/` when a valid session already
-    exists (no double-login loop). **`/debug`** — keep; `/api/user` compiles once
-    `get-user.ts` exists.
+   exists (no double-login loop). **`/debug`** — keep; `/api/user` compiles once
+   `get-user.ts` exists.
 
 ## Phase 3 — teardown
 

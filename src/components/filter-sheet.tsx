@@ -1,6 +1,4 @@
 import * as React from "react";
-import { RotateCcw, SlidersHorizontal } from "lucide-react";
-
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -21,6 +19,7 @@ import {
 } from "@/components/ui/sheet";
 import type { DayWithin, PartyFilters, TimeOfDay } from "@/lib/filters";
 import { formatBudget } from "@/lib/format";
+import { RotateCcw, SlidersHorizontal } from "lucide-react";
 
 export type ManualFilters = PartyFilters;
 

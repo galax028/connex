@@ -52,9 +52,7 @@ export function bangkokWeekday(instant: string | Date): number {
 
 /** Hour of day (0-23) of an instant in Bangkok. */
 export function bangkokHour(instant: string | Date): number {
-  return Number(
-    hourFmt.format(typeof instant === "string" ? new Date(instant) : instant),
-  ) % 24;
+  return Number(hourFmt.format(typeof instant === "string" ? new Date(instant) : instant)) % 24;
 }
 
 /** Bangkok calendar day `offset` days from today (fractional days ignored). */
@@ -106,10 +104,7 @@ export function formatEnrolmentYear(year: number | null): string | null {
   return `Year ${year}`;
 }
 
-export function spotsLeft(
-  maxSlots: number | null,
-  acceptedCount: number,
-): number {
+export function spotsLeft(maxSlots: number | null, acceptedCount: number): number {
   if (maxSlots === null) return Number.POSITIVE_INFINITY;
   return Math.max(0, maxSlots - acceptedCount);
 }

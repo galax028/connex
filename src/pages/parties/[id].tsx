@@ -1,9 +1,41 @@
-import Link from "next/link";
+import * as React from "react";
+import type { GetServerSideProps } from "next";
 import dynamic from "next/dynamic";
 import Head from "next/head";
-import type { GetServerSideProps } from "next";
+import Link from "next/link";
 import { useRouter } from "next/router";
-import * as React from "react";
+import { CategoryChip } from "@/components/category-chip";
+import { ParticipantAvatar } from "@/components/participant-avatar";
+import { EmptyState, ErrorState, SuccessBanner } from "@/components/state-views";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { inferArea } from "@/lib/areas";
+import { CREATED_PARTY_FLAG } from "@/lib/created-party";
+import {
+  formatBudgetPerPerson,
+  formatEnrolmentYear,
+  formatTime,
+  formatWhen,
+  isPast,
+} from "@/lib/format";
+import { approvedParticipants, deriveMyStatus, pendingRequests } from "@/lib/participants";
+import { createBrowserClient } from "@/lib/supabase/client";
+import type { Database } from "@/lib/supabase/database.types";
+import { getParty } from "@/lib/supabase/queries/get-party";
+import { getProfile } from "@/lib/supabase/queries/get-profile";
+import type { PartyDetail, ProfileSummary } from "@/lib/supabase/queries/types";
+import { createUserServerClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   ArrowLeft,
   Banknote,
@@ -19,53 +51,13 @@ import {
   Users,
   X,
 } from "lucide-react";
-import type { SupabaseClient } from "@supabase/supabase-js";
-
-import { CategoryChip } from "@/components/category-chip";
-import { ParticipantAvatar } from "@/components/participant-avatar";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { EmptyState, ErrorState, SuccessBanner } from "@/components/state-views";
-import { CREATED_PARTY_FLAG } from "@/lib/created-party";
-import { inferArea } from "@/lib/areas";
-import {
-  formatBudgetPerPerson,
-  formatEnrolmentYear,
-  formatTime,
-  formatWhen,
-  isPast,
-} from "@/lib/format";
-import {
-  approvedParticipants,
-  deriveMyStatus,
-  pendingRequests,
-} from "@/lib/participants";
-import { createBrowserClient } from "@/lib/supabase/client";
-import type { Database } from "@/lib/supabase/database.types";
-import { getParty } from "@/lib/supabase/queries/get-party";
-import { getProfile } from "@/lib/supabase/queries/get-profile";
-import type {
-  PartyDetail,
-  ProfileSummary,
-} from "@/lib/supabase/queries/types";
-import { createUserServerClient } from "@/lib/supabase/server";
 
 const MapPinPreview = dynamic(
   () => import("@/components/map-pin-picker").then((m) => m.MapPinPreview),
   {
     ssr: false,
     loading: () => <div className="h-40 w-full rounded-xl border bg-muted" />,
-  }
+  },
 );
 
 export interface PartyDetailsProps {
@@ -121,9 +113,7 @@ export default function PartyDetailsPage({
   }
 
   // Keyed by party id so local UI state resets when navigating between parties.
-  return (
-    <PartyDetailsView key={party.id} party={party} organiser={organiser} userId={userId} />
-  );
+  return <PartyDetailsView key={party.id} party={party} organiser={organiser} userId={userId} />;
 }
 
 const JOIN_COPY = {
@@ -230,7 +220,7 @@ function PartyDetailsView({
         setJoinError(
           error.code === "23514"
             ? "Availability rechecked — the last spot was just taken."
-            : "Could not send the request. Try again."
+            : "Could not send the request. Try again.",
         );
         return;
       }
@@ -280,7 +270,7 @@ function PartyDetailsView({
         setJoinError(
           error.code === "23514"
             ? "Party is full — the last spot was just taken."
-            : "Could not accept the request. Try again."
+            : "Could not accept the request. Try again.",
         );
         return;
       }
@@ -400,9 +390,7 @@ function PartyDetailsView({
                 {party.locationPin ? (
                   <div className="flex flex-col gap-1.5 pt-1">
                     <MapPinPreview pin={party.locationPin} />
-                    <p className="text-xs text-muted-foreground">
-                      Exact spot pinned by the host.
-                    </p>
+                    <p className="text-xs text-muted-foreground">Exact spot pinned by the host.</p>
                   </div>
                 ) : null}
                 <DetailRow
@@ -434,7 +422,7 @@ function PartyDetailsView({
             {organiser ? (
               <Link
                 href={`/profile/${organiser.id}`}
-                className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3 outline-none transition-colors hover:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3 transition-colors outline-none hover:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
               >
                 <ParticipantAvatar profile={organiser} />
                 <div className="flex min-w-0 flex-col">
@@ -461,7 +449,7 @@ function PartyDetailsView({
                   <li key={participant.id}>
                     <Link
                       href={`/profile/${participant.id}`}
-                      className="flex items-center gap-3 rounded-lg px-2 py-1.5 outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+                      className="flex items-center gap-3 rounded-lg px-2 py-1.5 transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
                     >
                       <ParticipantAvatar profile={participant} size="sm" />
                       <span className="text-sm">
@@ -494,11 +482,7 @@ function PartyDetailsView({
                         <span className="truncate text-sm font-medium">{participant.name}</span>
                       </div>
                       <div className="flex gap-1.5">
-                        <Button
-                          size="sm"
-                          disabled={busy}
-                          onClick={() => onAccept(participant.id)}
-                        >
+                        <Button size="sm" disabled={busy} onClick={() => onAccept(participant.id)}>
                           <Check data-icon="inline-start" aria-hidden="true" />
                           Accept
                         </Button>
@@ -594,7 +578,7 @@ function PartyDetailsView({
         {createdToast ? (
           <div
             role="status"
-            className="fixed inset-x-4 bottom-24 z-50 mx-auto flex max-w-sm items-start gap-3 rounded-xl border bg-card p-4 shadow-lg animate-in fade-in slide-in-from-bottom-2 duration-300 lg:bottom-6"
+            className="fixed inset-x-4 bottom-24 z-50 mx-auto flex max-w-sm animate-in items-start gap-3 rounded-xl border bg-card p-4 shadow-lg duration-300 fade-in slide-in-from-bottom-2 lg:bottom-6"
           >
             <CircleCheck aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-emerald-600" />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -607,7 +591,7 @@ function PartyDetailsView({
               type="button"
               aria-label="Dismiss notification"
               onClick={() => setCreatedToast(false)}
-              className="rounded-lg p-1 text-muted-foreground outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+              className="rounded-lg p-1 text-muted-foreground transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
             >
               <X aria-hidden="true" className="size-4" />
             </button>
@@ -708,10 +692,7 @@ function JoinPanel({
         {status === "requested" ? (
           <>
             {justRequested ? (
-              <SuccessBanner
-                title="Request sent"
-                body="The organiser will confirm your spot."
-              />
+              <SuccessBanner title="Request sent" body="The organiser will confirm your spot." />
             ) : (
               <p className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Hourglass aria-hidden="true" className="size-4" />
@@ -748,7 +729,8 @@ function JoinPanel({
         {status === "creator" ? (
           <>
             <p className="text-sm text-muted-foreground">
-              You’re hosting this plan. Manage join requests under ’crew’ section and coordinate in the chat.
+              You’re hosting this plan. Manage join requests under ’crew’ section and coordinate in
+              the chat.
             </p>
             <div className="flex flex-wrap gap-2">
               <Button render={<Link href={chatHref} />}>

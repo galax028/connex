@@ -1,7 +1,6 @@
 import Link from "next/link";
-
-import { cn } from "cn";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "cn";
 
 /** DB category names (`party_categories.name`); NULL category renders as "Other". */
 const CATEGORY_EMOJI: Record<string, string> = {

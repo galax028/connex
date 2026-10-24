@@ -1,20 +1,16 @@
 import Link from "next/link";
-
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { AiBadge } from "@/components/ai-badge";
 import { CategoryChip } from "@/components/category-chip";
-import {
-  ParticipantStack,
-  participantCountLabel,
-} from "@/components/participant-avatar";
-import { formatBudgetPerPerson, formatWhen, isPast } from "@/lib/format";
+import { ParticipantStack, participantCountLabel } from "@/components/participant-avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { inferArea } from "@/lib/areas";
+import { formatBudgetPerPerson, formatWhen, isPast } from "@/lib/format";
 import type { MyStatus } from "@/lib/participants";
 import { approvedParticipants } from "@/lib/participants";
 import type { PartySummary } from "@/lib/supabase/queries/types";
 import { cn } from "cn";
-import { Badge } from "@/components/ui/badge";
 import { CircleCheck, Clock3, Hourglass, MessageCircle } from "lucide-react";
 
 export type PartyCardTone = "default" | "ai" | "compact";
@@ -55,7 +51,7 @@ export function PartyCard({
         !nonInteractive && "hover:shadow-md",
         past && "opacity-70",
         tone === "primary" && "bg-primary/5 ring-primary/30",
-        className
+        className,
       )}
     >
       <div className="flex items-center gap-2 px-4">
@@ -105,7 +101,7 @@ export function PartyCard({
       <div
         className={cn(
           "mt-auto -mb-(--card-spacing) flex flex-col gap-2.5 border-t px-4 py-2.5",
-          tone === "primary" ? "border-primary/20 bg-primary/10" : "bg-muted/50"
+          tone === "primary" ? "border-primary/20 bg-primary/10" : "bg-muted/50",
         )}
       >
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
@@ -115,11 +111,13 @@ export function PartyCard({
             className="relative z-10"
           />
           <div className="flex flex-col items-end gap-1.5">
-            <span className="text-sm font-medium">{formatBudgetPerPerson(party.budgetPerPerson)}</span>
+            <span className="text-sm font-medium">
+              {formatBudgetPerPerson(party.budgetPerPerson)}
+            </span>
             <span
               className={cn(
                 "text-xs",
-                full ? "font-medium text-foreground" : "text-muted-foreground"
+                full ? "font-medium text-foreground" : "text-muted-foreground",
               )}
             >
               {participantCountLabel(party.participants, party.maxSlots)}
