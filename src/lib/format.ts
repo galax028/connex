@@ -1,51 +1,89 @@
-export function combineDateTime(date: string, time: string): Date {
-  const [y, m, d] = date.split("-").map(Number);
-  const [hh, mm] = time.split(":").map(Number);
-  return new Date(y, (m ?? 1) - 1, d ?? 1, hh ?? 0, mm ?? 0);
-}
+/**
+ * All instants are ISO 8601 strings. Display is pinned to Asia/Bangkok so
+ * server rendering (UTC host clock) and client hydration render identically.
+ */
+export const BANGKOK_TZ = "Asia/Bangkok";
 
-export function toDateKey(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-export function daysFromToday(offset: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + offset);
-  return toDateKey(d);
-}
-
-export function isPast(partyDate: string, partyTime: string, now = new Date()): boolean {
-  return combineDateTime(partyDate, partyTime).getTime() < now.getTime();
-}
+const dayKeyFmt = new Intl.DateTimeFormat("en-CA", {
+  timeZone: BANGKOK_TZ,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
 
 const dayFmt = new Intl.DateTimeFormat("en-GB", {
+  timeZone: BANGKOK_TZ,
   weekday: "short",
   day: "numeric",
   month: "short",
 });
 
 const timeFmt = new Intl.DateTimeFormat("en-GB", {
+  timeZone: BANGKOK_TZ,
   hour: "numeric",
   minute: "2-digit",
-  hour12: false,
+  hourCycle: "h23",
 });
 
-export function formatDay(date: string): string {
-  const d = combineDateTime(date, "12:00");
-  const today = toDateKey(new Date());
-  const tomorrow = daysFromToday(1);
-  if (date === today) return "Today";
-  if (date === tomorrow) return "Tomorrow";
-  return dayFmt.format(d);
+const hourFmt = new Intl.DateTimeFormat("en-US", {
+  timeZone: BANGKOK_TZ,
+  hour: "numeric",
+  hourCycle: "h23",
+});
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+const weekdayFmt = new Intl.DateTimeFormat("en-US", {
+  timeZone: BANGKOK_TZ,
+  weekday: "short",
+});
+
+/** Calendar day of an instant in Bangkok, as `YYYY-MM-DD`. */
+export function bangkokDayKey(instant: string | Date): string {
+  return dayKeyFmt.format(typeof instant === "string" ? new Date(instant) : instant);
 }
 
-export function formatTime(time: string): string {
-  return timeFmt.format(combineDateTime("2000-01-01", time));
+/** Day of week (0=Sun..6=Sat) of an instant in Bangkok. */
+export function bangkokWeekday(instant: string | Date): number {
+  return WEEKDAYS.indexOf(
+    weekdayFmt.format(typeof instant === "string" ? new Date(instant) : instant),
+  );
 }
 
-export function formatWhen(date: string, time: string): string {
-  return `${formatDay(date)} · ${formatTime(time)}`;
+/** Hour of day (0-23) of an instant in Bangkok. */
+export function bangkokHour(instant: string | Date): number {
+  return Number(
+    hourFmt.format(typeof instant === "string" ? new Date(instant) : instant),
+  ) % 24;
+}
+
+/** Bangkok calendar day `offset` days from today (fractional days ignored). */
+export function daysFromToday(offset: number): string {
+  return bangkokDayKey(new Date(Date.now() + offset * 86_400_000));
+}
+
+/** Builds an ISO instant from date (`YYYY-MM-DD`) and time (`HH:mm`) inputs. */
+export function toBangkokIso(date: string, time: string): string {
+  return `${date}T${time}:00+07:00`;
+}
+
+export function isPast(iso: string, now = Date.now()): boolean {
+  return new Date(iso).getTime() < now;
+}
+
+export function formatDay(iso: string): string {
+  const key = bangkokDayKey(iso);
+  if (key === daysFromToday(0)) return "Today";
+  if (key === daysFromToday(1)) return "Tomorrow";
+  return dayFmt.format(new Date(iso));
+}
+
+export function formatTime(iso: string): string {
+  return timeFmt.format(new Date(iso));
+}
+
+export function formatWhen(iso: string): string {
+  return `${formatDay(iso)} · ${formatTime(iso)}`;
 }
 
 export function formatBudget(amount: number): string {
@@ -53,17 +91,27 @@ export function formatBudget(amount: number): string {
   return `฿${amount.toLocaleString("en-US")}`;
 }
 
-export function formatBudgetPerPerson(amount: number): string {
-  if (amount === 0) return "Free";
+export function formatBudgetPerPerson(amount: number | null): string {
+  if (amount === null || amount === 0) return "Free";
   return `≈ ฿${amount.toLocaleString("en-US")}/person`;
 }
 
+/**
+ * Mock profiles showed "Year 3"; the DB `enrolment_year` is a smallint whose
+ * real-world meaning is unverified — only render values plausibly denoting an
+ * academic year, hide anything else.
+ */
+export function formatEnrolmentYear(year: number | null): string | null {
+  if (year === null || year < 1 || year > 9) return null;
+  return `Year ${year}`;
+}
+
 export function spotsLeft(
-  partyCapacity: number | null,
-  acceptedCount: number
+  maxSlots: number | null,
+  acceptedCount: number,
 ): number {
-  if (partyCapacity === null) return Number.POSITIVE_INFINITY;
-  return Math.max(0, partyCapacity - acceptedCount);
+  if (maxSlots === null) return Number.POSITIVE_INFINITY;
+  return Math.max(0, maxSlots - acceptedCount);
 }
 
 export function plural(n: number, one: string, many: string): string {
@@ -71,20 +119,5 @@ export function plural(n: number, one: string, many: string): string {
 }
 
 export function formatMessageTime(iso: string): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: false,
-  }).format(new Date(iso));
-}
-
-export function relativeToNow(iso: string): string {
-  const then = new Date(iso).getTime();
-  const diff = Date.now() - then;
-  const mins = Math.round(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.round(hours / 24)}d ago`;
+  return timeFmt.format(new Date(iso));
 }

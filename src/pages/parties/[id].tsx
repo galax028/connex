@@ -1,6 +1,7 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import Head from "next/head";
+import type { GetServerSideProps } from "next";
 import { useRouter } from "next/router";
 import * as React from "react";
 import {
@@ -18,6 +19,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { CategoryChip } from "@/components/category-chip";
 import { ParticipantAvatar } from "@/components/participant-avatar";
@@ -33,12 +35,30 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState, SuccessBanner } from "@/components/state-views";
-import { CREATED_PARTY_FLAG, useApp } from "@/lib/data/store";
-import type { Party } from "@/lib/data/types";
-import { formatBudgetPerPerson, formatTime, formatWhen, isPast } from "@/lib/format";
-import { cn } from "cn";
+import { CREATED_PARTY_FLAG } from "@/lib/created-party";
+import { inferArea } from "@/lib/areas";
+import {
+  formatBudgetPerPerson,
+  formatEnrolmentYear,
+  formatTime,
+  formatWhen,
+  isPast,
+} from "@/lib/format";
+import {
+  approvedParticipants,
+  deriveMyStatus,
+  pendingRequests,
+} from "@/lib/participants";
+import { createBrowserClient } from "@/lib/supabase/client";
+import type { Database } from "@/lib/supabase/database.types";
+import { getParty } from "@/lib/supabase/queries/get-party";
+import { getProfile } from "@/lib/supabase/queries/get-profile";
+import type {
+  PartyDetail,
+  ProfileSummary,
+} from "@/lib/supabase/queries/types";
+import { createUserServerClient } from "@/lib/supabase/server";
 
 const MapPinPreview = dynamic(
   () => import("@/components/map-pin-picker").then((m) => m.MapPinPreview),
@@ -48,29 +68,48 @@ const MapPinPreview = dynamic(
   }
 );
 
-function asId(param: string | string[] | undefined): string | undefined {
-  return Array.isArray(param) ? param[0] : param;
+export interface PartyDetailsProps {
+  notFound: boolean;
+  party?: PartyDetail;
+  organiser?: ProfileSummary | null;
+  userId?: string;
 }
 
-export default function PartyDetailsPage() {
-  const router = useRouter();
-  const partyId = asId(router.query.id);
-  const { hydrated, getParty } = useApp();
-  const party = hydrated && partyId ? getParty(partyId) : undefined;
+export const getServerSideProps: GetServerSideProps<PartyDetailsProps> = async ({
+  req,
+  res,
+  params,
+}) => {
+  const supabase = createUserServerClient(req, res);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { redirect: { destination: "/signin", permanent: false } };
 
-  if (!hydrated) {
-    return <DetailsSkeleton />;
-  }
+  const id = typeof params?.id === "string" ? params.id : undefined;
+  if (!id) return { props: { notFound: true } };
 
-  if (!party || !partyId) {
+  const party = await getParty(supabase, id);
+  if (!party) return { props: { notFound: true } };
+
+  const organiser = await getProfile(supabase, party.organiserId);
+
+  return {
+    props: { notFound: false, party, organiser, userId: user.id },
+  };
+};
+
+export default function PartyDetailsPage({
+  notFound,
+  party,
+  organiser = null,
+  userId = "",
+}: PartyDetailsProps) {
+  if (notFound || !party) {
     return (
       <EmptyState
-        title={router.isReady ? "Party not found" : "Loading…"}
-        body={
-          router.isReady
-            ? "This plan may have been removed, or the link is from another browser profile."
-            : undefined
-        }
+        title="Party not found"
+        body="This plan may have been removed, or the link is from another account."
         actions={
           <Button variant="outline" render={<Link href="/" />}>
             <ArrowLeft data-icon="inline-start" aria-hidden="true" />
@@ -82,7 +121,9 @@ export default function PartyDetailsPage() {
   }
 
   // Keyed by party id so local UI state resets when navigating between parties.
-  return <PartyDetailsView key={party.id} party={party} />;
+  return (
+    <PartyDetailsView key={party.id} party={party} organiser={organiser} userId={userId} />
+  );
 }
 
 const JOIN_COPY = {
@@ -96,33 +137,59 @@ const JOIN_COPY = {
   },
 } as const;
 
-function PartyDetailsView({ party }: { party: Party }) {
+/**
+ * Recomputes `parties.taken_slots` from the current approved-row count after
+ * every parties_users mutation (recompute-and-set — never +1/−1). Returns
+ * "full" when the capacity CHECK rejected the write.
+ */
+async function syncTakenSlots(
+  supabase: SupabaseClient<Database>,
+  partyId: string,
+): Promise<"ok" | "full" | "error"> {
+  const { count, error: countError } = await supabase
+    .from("parties_users")
+    .select("user_id", { count: "exact", head: true })
+    .eq("party_id", partyId)
+    .eq("status", "approved");
+  if (countError) return "error";
+  const approvedCount = count ?? 0;
+
+  const { error } = await supabase
+    .from("parties")
+    .update({ taken_slots: approvedCount })
+    .eq("id", partyId);
+  if (error) {
+    return error.code === "23514" ? "full" : "error";
+  }
+  return "ok";
+}
+
+function PartyDetailsView({
+  party,
+  organiser,
+  userId,
+}: {
+  party: PartyDetail;
+  organiser: ProfileSummary | null;
+  userId: string;
+}) {
   const router = useRouter();
-  const {
-    getProfile,
-    myStatusFor,
-    acceptedParticipants,
-    pendingRequests,
-    requestJoin,
-    cancelRequest,
-    leaveParty,
-    acceptRequest,
-    declineRequest,
-    deleteParty,
-    currentUserId,
-  } = useApp();
 
-  const status = myStatusFor(party);
-  const past = isPast(party.date, party.time);
-  const accepted = acceptedParticipants(party);
-  const full = party.capacity !== null && accepted.length >= party.capacity;
-  const isCreator = party.creatorId === currentUserId;
+  const status = deriveMyStatus(party, userId);
+  const past = isPast(party.timeStart);
+  const accepted = approvedParticipants(party);
+  const full = party.maxSlots !== null && accepted.length >= party.maxSlots;
+  const isCreator = party.organiserId === userId;
 
+  const [busy, setBusy] = React.useState(false);
   const [joinError, setJoinError] = React.useState<string | null>(null);
   const [justRequested, setJustRequested] = React.useState(false);
   const [confirmLeave, setConfirmLeave] = React.useState(false);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
   const [createdToast, setCreatedToast] = React.useState(false);
+
+  const supabase = createBrowserClient();
+  const refresh = () => router.replace(router.asPath);
 
   // One-shot toast: flagged by the create page right before redirecting here.
   React.useEffect(() => {
@@ -141,24 +208,127 @@ function PartyDetailsView({ party }: { party: Party }) {
     return () => window.clearTimeout(timer);
   }, [party.id]);
 
-  const onJoin = () => {
+  const onJoin = async () => {
     setJoinError(null);
     setJustRequested(false);
-    const result = requestJoin(party.id);
-    if (!result.ok) {
-      setJoinError(
-        result.reason === "full"
-          ? "Availability rechecked — the last spot was just taken."
-          : result.reason === "past"
-            ? "This activity already happened."
+    if (full) {
+      setJoinError("Availability rechecked — the last spot was just taken.");
+      return;
+    }
+    if (past) {
+      setJoinError("This activity already happened.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const { error } = await supabase.from("parties_users").insert({
+        party_id: party.id,
+        user_id: userId,
+        status: party.approvalRequired ? "pending" : "approved",
+      });
+      if (error) {
+        setJoinError(
+          error.code === "23514"
+            ? "Availability rechecked — the last spot was just taken."
             : "Could not send the request. Try again."
-      );
-    } else {
+        );
+        return;
+      }
+      await syncTakenSlots(supabase, party.id);
       setJustRequested(true);
+      await refresh();
+    } finally {
+      setBusy(false);
     }
   };
 
-  const creator = getProfile(party.creatorId);
+  const onRemoveOwnRow = async () => {
+    setJoinError(null);
+    setBusy(true);
+    try {
+      const { error } = await supabase
+        .from("parties_users")
+        .delete()
+        .eq("party_id", party.id)
+        .eq("user_id", userId);
+      if (error) {
+        setJoinError("Could not update your spot. Try again.");
+        return;
+      }
+      await syncTakenSlots(supabase, party.id);
+      setJustRequested(false);
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onAccept = async (participantId: string) => {
+    setJoinError(null);
+    if (full) {
+      setJoinError("Party is full — free up a spot before accepting more requests.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const { error } = await supabase
+        .from("parties_users")
+        .update({ status: "approved" })
+        .eq("party_id", party.id)
+        .eq("user_id", participantId);
+      if (error) {
+        setJoinError(
+          error.code === "23514"
+            ? "Party is full — the last spot was just taken."
+            : "Could not accept the request. Try again."
+        );
+        return;
+      }
+      const synced = await syncTakenSlots(supabase, party.id);
+      if (synced === "full") {
+        setJoinError("Party is full — the last spot was just taken.");
+      }
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onDecline = async (participantId: string) => {
+    setJoinError(null);
+    setBusy(true);
+    try {
+      const { error } = await supabase
+        .from("parties_users")
+        .delete()
+        .eq("party_id", party.id)
+        .eq("user_id", participantId);
+      if (error) {
+        setJoinError("Could not decline the request. Try again.");
+        return;
+      }
+      await syncTakenSlots(supabase, party.id);
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onDelete = async () => {
+    setBusy(true);
+    try {
+      const { error } = await supabase.from("parties").delete().eq("id", party.id);
+      if (error) {
+        setJoinError("Could not delete the plan. Try again.");
+        setConfirmDelete(false);
+        return;
+      }
+      router.push("/");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const pending = pendingRequests(party);
 
   return (
@@ -177,9 +347,9 @@ function PartyDetailsView({ party }: { party: Party }) {
 
         <header className="flex flex-col gap-2.5">
           <div className="flex flex-wrap items-center gap-2">
-            <CategoryChip category={party.category} />
+            <CategoryChip category={party.categoryName} />
             <Badge variant="outline">
-              {party.requiresApproval ? "Host approves requests" : "Instant join"}
+              {party.approvalRequired ? "Host approves requests" : "Instant join"}
             </Badge>
             {past ? (
               <Badge variant="outline" className="gap-1">
@@ -204,7 +374,9 @@ function PartyDetailsView({ party }: { party: Party }) {
             {isCreator ? <Badge variant="secondary">You’re hosting</Badge> : null}
           </div>
           <h1 className="font-heading heading-1 font-semibold tracking-tight">{party.title}</h1>
-          <p className="text-sm leading-relaxed text-foreground/90">{party.description}</p>
+          {party.description ? (
+            <p className="text-sm leading-relaxed text-foreground/90">{party.description}</p>
+          ) : null}
         </header>
 
         <div className="flex flex-col gap-5 lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-10">
@@ -212,18 +384,18 @@ function PartyDetailsView({ party }: { party: Party }) {
             <Card size="sm">
               <CardContent className="flex flex-col gap-3 pt-1">
                 <DetailRow
-              icon={<CalendarDays aria-hidden="true" />}
-              label="When"
-              value={
-                party.endTime
-                  ? `${formatWhen(party.date, party.time)} – ${formatTime(party.endTime)}`
-                  : formatWhen(party.date, party.time)
-              }
-            />
+                  icon={<CalendarDays aria-hidden="true" />}
+                  label="When"
+                  value={
+                    party.timeEnd
+                      ? `${formatWhen(party.timeStart)} – ${formatTime(party.timeEnd)}`
+                      : formatWhen(party.timeStart)
+                  }
+                />
                 <DetailRow
                   icon={<MapPin aria-hidden="true" />}
                   label="Where"
-                  value={`${party.location} · ${party.area}`}
+                  value={`${party.location} · ${inferArea(party.location)}`}
                 />
                 {party.locationPin ? (
                   <div className="flex flex-col gap-1.5 pt-1">
@@ -242,16 +414,16 @@ function PartyDetailsView({ party }: { party: Party }) {
                   icon={<Users aria-hidden="true" />}
                   label="Crew"
                   value={
-                    party.capacity === null
+                    party.maxSlots === null
                       ? `${accepted.length} confirmed · open group${pending.length > 0 ? ` · ${pending.length} pending` : ""}`
-                      : `${accepted.length}/${party.capacity} confirmed${pending.length > 0 ? ` · ${pending.length} pending` : ""}`
+                      : `${accepted.length}/${party.maxSlots} confirmed${pending.length > 0 ? ` · ${pending.length} pending` : ""}`
                   }
                 />
-                {party.interests.length > 0 ? (
+                {party.tags.length > 0 ? (
                   <div className="flex flex-wrap gap-1.5 pt-1">
-                    {party.interests.map((interest) => (
-                      <Badge key={interest} variant="outline">
-                        {interest}
+                    {party.tags.map((tag) => (
+                      <Badge key={tag.id} variant="outline">
+                        {tag.name}
                       </Badge>
                     ))}
                   </div>
@@ -259,99 +431,103 @@ function PartyDetailsView({ party }: { party: Party }) {
               </CardContent>
             </Card>
 
-            {creator ? (
+            {organiser ? (
               <Link
-                href={`/profile/${creator.id}`}
+                href={`/profile/${organiser.id}`}
                 className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3 outline-none transition-colors hover:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
               >
-                <ParticipantAvatar profile={creator} />
+                <ParticipantAvatar profile={organiser} />
                 <div className="flex min-w-0 flex-col">
                   <span className="truncate text-sm font-medium">
-                    {creator.name}
-                    {creator.id === currentUserId ? " (you)" : ""}
+                    {organiser.name}
+                    {organiser.id === userId ? " (you)" : ""}
                   </span>
                   <span className="truncate text-xs text-muted-foreground">
-                    Organiser · {creator.faculty} · {creator.year}
+                    Organiser · {organiser.facultyName}
+                    {formatEnrolmentYear(organiser.enrolmentYear)
+                      ? ` · ${formatEnrolmentYear(organiser.enrolmentYear)}`
+                      : ""}
                   </span>
                 </div>
               </Link>
             ) : null}
 
-        <section aria-labelledby="participants-heading" className="flex flex-col gap-2">
-          <h2 id="participants-heading" className="font-heading heading-3 font-semibold">
-            Crew ({accepted.length})
-          </h2>
-          <ul className="flex flex-col gap-1.5">
-            {accepted.map((participant) => {
-              const profile = getProfile(participant.profileId);
-              return (
-                <li key={participant.profileId}>
-                  <Link
-                    href={`/profile/${participant.profileId}`}
-                    className="flex items-center gap-3 rounded-lg px-2 py-1.5 outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
-                  >
-                    <ParticipantAvatar profile={profile} size="sm" />
-                    <span className="text-sm">
-                      {profile?.name ?? "Unknown"}
-                      {participant.profileId === currentUserId ? " (you)" : ""}
-                    </span>
-                    <span className="ml-auto text-xs text-muted-foreground">Confirmed</span>
-                  </Link>
-                </li>
-              );
-            })}
-            {accepted.length === 0 ? (
-              <li className="text-sm text-muted-foreground">No confirmed members yet.</li>
-            ) : null}
-          </ul>
-        </section>
-
-        {isCreator && pending.length > 0 ? (
-          <section aria-labelledby="requests-heading" className="flex flex-col gap-2">
-            <h2 id="requests-heading" className="font-heading heading-3 font-semibold">
-              Join requests ({pending.length})
-            </h2>
-            <ul className="flex flex-col gap-2">
-              {pending.map((participant) => {
-                const profile = getProfile(participant.profileId);
-                return (
-                  <li
-                    key={participant.profileId}
-                    className="flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5"
-                  >
-                    <ParticipantAvatar profile={profile} size="sm" />
-                    <div className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate text-sm font-medium">{profile?.name}</span>
-                      <span className="truncate text-xs text-muted-foreground">
-                        {profile?.faculty} · {profile?.year}
+            <section aria-labelledby="participants-heading" className="flex flex-col gap-2">
+              <h2 id="participants-heading" className="font-heading heading-3 font-semibold">
+                Crew ({accepted.length})
+              </h2>
+              <ul className="flex flex-col gap-1.5">
+                {accepted.map((participant) => (
+                  <li key={participant.id}>
+                    <Link
+                      href={`/profile/${participant.id}`}
+                      className="flex items-center gap-3 rounded-lg px-2 py-1.5 outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+                    >
+                      <ParticipantAvatar profile={participant} size="sm" />
+                      <span className="text-sm">
+                        {participant.name}
+                        {participant.id === userId ? " (you)" : ""}
                       </span>
-                    </div>
-                    <div className="flex gap-1.5">
-                      <Button size="sm" onClick={() => acceptRequest(party.id, participant.profileId)}>
-                        <Check data-icon="inline-start" aria-hidden="true" />
-                        Accept
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => declineRequest(party.id, participant.profileId)}
-                      >
-                        <X data-icon="inline-start" aria-hidden="true" />
-                        Decline
-                      </Button>
-                    </div>
+                      <span className="ml-auto text-xs text-muted-foreground">Confirmed</span>
+                    </Link>
                   </li>
-                );
-              })}
-            </ul>
-            <p className="text-xs text-muted-foreground">
-              Accepting confirms their spot. Pending requests do not take a spot until accepted.
-            </p>
-          </section>
-        ) : null}
+                ))}
+                {accepted.length === 0 ? (
+                  <li className="text-sm text-muted-foreground">No confirmed members yet.</li>
+                ) : null}
+              </ul>
+            </section>
+
+            {isCreator && pending.length > 0 ? (
+              <section aria-labelledby="requests-heading" className="flex flex-col gap-2">
+                <h2 id="requests-heading" className="font-heading heading-3 font-semibold">
+                  Join requests ({pending.length})
+                </h2>
+                <ul className="flex flex-col gap-2">
+                  {pending.map((participant) => (
+                    <li
+                      key={participant.id}
+                      className="flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5"
+                    >
+                      <ParticipantAvatar profile={participant} size="sm" />
+                      <div className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate text-sm font-medium">{participant.name}</span>
+                      </div>
+                      <div className="flex gap-1.5">
+                        <Button
+                          size="sm"
+                          disabled={busy}
+                          onClick={() => onAccept(participant.id)}
+                        >
+                          <Check data-icon="inline-start" aria-hidden="true" />
+                          Accept
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() => onDecline(participant.id)}
+                        >
+                          <X data-icon="inline-start" aria-hidden="true" />
+                          Decline
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-muted-foreground">
+                  Accepting confirms their spot. Pending requests do not take a spot until accepted.
+                </p>
+              </section>
+            ) : null}
 
             {isCreator ? (
-              <Button variant="destructive" className="self-start" onClick={() => setConfirmDelete(true)}>
+              <Button
+                variant="destructive"
+                className="self-start"
+                disabled={busy}
+                onClick={() => setConfirmDelete(true)}
+              >
                 <Trash2 data-icon="inline-start" aria-hidden="true" />
                 Delete this plan
               </Button>
@@ -363,11 +539,12 @@ function PartyDetailsView({ party }: { party: Party }) {
               status={status}
               past={past}
               full={full}
-              requiresApproval={party.requiresApproval}
+              busy={busy}
+              requiresApproval={party.approvalRequired}
               joinError={joinError}
               justRequested={justRequested && status === "requested"}
               onJoin={onJoin}
-              onCancelRequest={() => cancelRequest(party.id)}
+              onCancelRequest={onRemoveOwnRow}
               onOpenLeave={() => setConfirmLeave(true)}
               chatHref={`/parties/${party.id}/chat`}
             />
@@ -385,10 +562,10 @@ function PartyDetailsView({ party }: { party: Party }) {
             <DialogFooter>
               <DialogClose render={<Button variant="outline" />}>Stay</DialogClose>
               <Button
+                disabled={busy}
                 onClick={() => {
-                  leaveParty(party.id);
                   setConfirmLeave(false);
-                  setJustRequested(false);
+                  void onRemoveOwnRow();
                 }}
               >
                 Leave party
@@ -402,18 +579,12 @@ function PartyDetailsView({ party }: { party: Party }) {
             <DialogHeader>
               <DialogTitle>Delete this plan?</DialogTitle>
               <DialogDescription>
-                This removes the plan and its chat for everyone in this prototype browser.
+                This permanently removes the plan for everyone — members lose their spot.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
               <DialogClose render={<Button variant="outline" />}>Keep it</DialogClose>
-              <Button
-                onClick={() => {
-                  deleteParty(party.id);
-                  setConfirmDelete(false);
-                  router.push("/");
-                }}
-              >
+              <Button variant="destructive" disabled={busy} onClick={() => void onDelete()}>
                 Delete plan
               </Button>
             </DialogFooter>
@@ -473,6 +644,7 @@ function JoinPanel({
   status,
   past,
   full,
+  busy,
   requiresApproval,
   joinError,
   justRequested,
@@ -484,6 +656,7 @@ function JoinPanel({
   status: "none" | "requested" | "joined" | "creator";
   past: boolean;
   full: boolean;
+  busy: boolean;
   requiresApproval: boolean;
   joinError: string | null;
   justRequested: boolean;
@@ -512,7 +685,7 @@ function JoinPanel({
       <CardContent className="flex flex-col gap-3 pt-0">
         {status === "none" && !past && !full ? (
           <>
-            <Button size="lg" onClick={onJoin}>
+            <Button size="lg" disabled={busy} onClick={onJoin}>
               <UserRoundPlus data-icon="inline-start" aria-hidden="true" />
               {requiresApproval ? "Request to join" : "Join party"}
             </Button>
@@ -537,17 +710,16 @@ function JoinPanel({
             {justRequested ? (
               <SuccessBanner
                 title="Request sent"
-                body="The organiser will confirm your spot. In this prototype the host auto-approves in a moment."
+                body="The organiser will confirm your spot."
               />
             ) : (
               <p className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Hourglass aria-hidden="true" className="size-4" />
                 Waiting for the organiser to confirm your spot…
-                <span className="text-xs">(auto-approved in this prototype)</span>
               </p>
             )}
             <div className="flex gap-2">
-              <Button variant="outline" onClick={onCancelRequest}>
+              <Button variant="outline" disabled={busy} onClick={onCancelRequest}>
                 Cancel request
               </Button>
               <Button variant="ghost" disabled>
@@ -566,7 +738,7 @@ function JoinPanel({
                 <MessageCircle data-icon="inline-start" aria-hidden="true" />
                 Open group chat
               </Button>
-              <Button variant="outline" onClick={onOpenLeave}>
+              <Button variant="outline" disabled={busy} onClick={onOpenLeave}>
                 Leave party
               </Button>
             </div>
@@ -588,29 +760,5 @@ function JoinPanel({
         ) : null}
       </CardContent>
     </Card>
-  );
-}
-
-function DetailsSkeleton() {
-  return (
-    <div className="flex flex-col gap-5" role="status" aria-label="Loading party details">
-      <Skeleton className="h-8 w-8 rounded-lg" />
-      <div className="flex flex-col gap-2.5">
-        <Skeleton className="h-5 w-24 rounded-full" />
-        <Skeleton className="h-7 w-3/4" />
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-2/3" />
-      </div>
-      <div className="flex flex-col gap-3 rounded-xl bg-card p-4 ring-1 ring-foreground/10">
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="flex items-center gap-3">
-            <Skeleton className="size-4" />
-            <Skeleton className="h-4 flex-1" />
-          </div>
-        ))}
-      </div>
-      <Skeleton className="h-24 rounded-xl" />
-      <Skeleton className={cn("h-40 rounded-xl")} />
-    </div>
   );
 }

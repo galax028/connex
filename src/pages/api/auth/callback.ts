@@ -10,15 +10,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const code = typeof req.query.code === "string" ? req.query.code : null;
   if (!code) {
-    return res.redirect(302, "/login?error=missing_code");
+    return res.redirect(302, "/signin?error=missing_code");
   }
 
   const supabase = createServerClient(req, res);
   const { data: auth, error: authError } = await supabase.auth.exchangeCodeForSession(code);
   if (authError) {
+    console.error("AUTHERROR", authError);
     return res.redirect(
       302,
-      `/login?error=${encodeURIComponent(authError.code ?? "callback_error")}`,
+      `/signin?error=${encodeURIComponent(authError.code ?? "callback_error")}`,
     );
   }
 

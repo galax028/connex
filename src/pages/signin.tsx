@@ -1,6 +1,17 @@
 import { useState } from "react";
+import type { GetServerSideProps } from "next";
 import { useRouter } from "next/router";
 import { createBrowserClient } from "@/lib/supabase/client";
+import { createUserServerClient } from "@/lib/supabase/server";
+
+export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
+  const supabase = createUserServerClient(req, res);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user) return { redirect: { destination: "/", permanent: false } };
+  return { props: {} };
+};
 
 export default function Login() {
   const router = useRouter();

@@ -200,6 +200,16 @@ WITH CHECK (organiser_id = (SELECT auth.uid()));
 CREATE POLICY delete_parties ON parties FOR DELETE TO authenticated
 USING (organiser_id = (SELECT auth.uid()));
 
+-- taken_slots is maintained app-side (recompute-and-set after every
+-- parties_users mutation), so UPDATE is column-scoped: any authenticated
+-- member may write only taken_slots; every other column stays read-only.
+REVOKE UPDATE ON parties FROM authenticated;
+GRANT UPDATE (taken_slots) ON parties TO authenticated;
+
+CREATE POLICY update_parties_taken_slots ON parties FOR UPDATE TO authenticated
+USING (true)
+WITH CHECK (true);
+
 
 CREATE TABLE parties_tags (
     party_id uuid NOT NULL REFERENCES parties(id) ON DELETE CASCADE,

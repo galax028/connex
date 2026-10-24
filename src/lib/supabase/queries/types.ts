@@ -3,8 +3,8 @@ import type { Database } from "@/lib/supabase/database.types";
 type ApprovalStatus = Database["public"]["Enums"]["approval_status"];
 
 export type UserResult = {
-  facultyName: string;
-  enrolmentYear: number;
+  facultyName: string | null;
+  enrolmentYear: number | null;
   profileUrl: string;
   fullname: string;
   nickname: string | null;
@@ -20,6 +20,8 @@ export type PartyResult = {
   time_start: string;
   time_end: string | null;
   location: string | null;
+  /** Postgres `point` serialized by PostgREST as "(x,y)" with x=lng, y=lat. */
+  location_coordinates?: string | null;
   estimated_cost: number | null;
   approval_required: boolean;
   taken_slots: number | null;
@@ -28,6 +30,7 @@ export type PartyResult = {
   created_at: string;
   party_categories: { name: string } | null;
   parties_tags: { id: string; name: string }[];
+  parties_users: ParticipantJoinedResult[];
 };
 
 export type ParticipantResult = {
@@ -60,10 +63,6 @@ export type ProfileWithTagsResult = ProfileResult & {
   users_tags: { id: string; name: string }[];
 };
 
-export type PartyDetailResult = PartyResult & {
-  parties_users: ParticipantJoinedResult[];
-};
-
 export type PartyParticipant = {
   id: string;
   name: string;
@@ -82,6 +81,7 @@ export type PartySummary = {
   timeStart: string;
   timeEnd: string | null;
   location: string;
+  locationPin?: { lat: number; lng: number };
   budgetPerPerson: number | null;
   approvalRequired: boolean;
   takenSlots: number;
@@ -89,11 +89,10 @@ export type PartySummary = {
   organiserId: string;
   tags: { id: string; name: string }[];
   createdAt: string;
-};
-
-export type PartyDetail = PartySummary & {
   participants: PartyParticipant[];
 };
+
+export type PartyDetail = PartySummary;
 
 export type ProfileSummary = {
   id: string;

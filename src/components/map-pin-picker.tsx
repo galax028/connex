@@ -4,7 +4,7 @@ import "leaflet/dist/leaflet.css";
 import { CircleCheck, MapPin as MapPinIcon, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import type { MapPin } from "@/lib/data/types";
+import type { MapPin } from "@/lib/filters";
 import { cn } from "cn";
 
 /** Chulalongkorn University area — where the map opens when nothing is chosen yet. */

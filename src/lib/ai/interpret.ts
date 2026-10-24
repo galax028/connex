@@ -1,22 +1,17 @@
-import type {
-  Category,
-  DayWithin,
-  Party,
-  PartyFilters,
-  Profile,
-  SortOption,
-  TimeOfDay,
-} from "@/lib/data/types";
-import { CATEGORY_LABELS } from "@/lib/data/types";
+import type { DayWithin, PartyFilters, SortOption, TimeOfDay } from "@/lib/filters";
+import type { PartySummary, ProfileSummary } from "@/lib/supabase/queries/types";
+import { inferArea } from "@/lib/areas";
 import {
-  combineDateTime,
+  bangkokDayKey,
+  bangkokHour,
+  bangkokWeekday,
   daysFromToday,
   formatBudget,
   isPast,
   plural,
   spotsLeft,
-  toDateKey,
-} from "../format";
+} from "@/lib/format";
+import { approvedParticipants } from "@/lib/participants";
 
 /**
  * Prototype note: this module *simulates* natural-language interpretation with
@@ -47,38 +42,39 @@ export interface Interpretation {
   notes: string[];
 }
 
-const CATEGORY_WORDS: Record<Category, string[]> = {
-  sports: [
+/** Keys are DB category names (`party_categories.name`). */
+const CATEGORY_WORDS: Record<string, string[]> = {
+  Sports: [
     "badminton", "แบด", "ตีแบด", "football", "ฟุตบอล", "basketball", "บาส",
     "running", "วิ่ง", "muay", "มวย", "volleyball", "วอลเลย์", "bowling",
     "โบว์ลิ่ง", "gym", "fitness", "tennis", "swim", "ว่ายน้ำ", "sport", "กีฬา",
   ],
-  food: [
+  Food: [
     "food", "กิน", "ข้าว", "หมูกระทะ", "hotpot", "สุกี้", "bbq", "บุฟเฟ่ต์",
     "buffet", "ชานม", "bubble tea", "dessert", "ขนม", "restaurant", "ร้านอาหาร",
     "sushi", "ramen", "กะเพรา", "ส้มตำ", "k-bbq", "หารกิน", "มื้อ",
   ],
-  gaming: [
+  Gaming: [
     "game", "เกม", "valorant", "lol", "league", "board game", "บอร์ดเกม",
     "dota", "playstation", "switch", "esport", "gaming", "minecraft", "genshin",
   ],
-  studying: [
+  Studying: [
     "study", "ติว", "สอบ", "exam", "อ่านหนังสือ", "ห้องสมุด", "library",
     "homework", "การบ้าน", "assignment", "cram", "project", "งานกลุ่ม", "final",
   ],
-  arts: [
+  Arts: [
     "movie", "หนัง", "cinema", "photo", "ถ่ายรูป", "art", "ศิลปะ", "draw",
     "วาด", "museum", "พิพิธภัณฑ์", "craft", "ghibli",
   ],
-  music: [
+  Music: [
     "karaoke", "คาราโอเกะ", "sing", "ร้องเพลง", "concert", "คอนเสิร์ต",
     "music", "เพลง", "guitar", "กีตาร์", "band",
   ],
-  outdoor: [
+  Sightseeing: [
     "hike", "เดินป่า", "travel", "เที่ยว", "market", "ตลาดนัด", "walk",
     "เดินเล่น", "park", "สวน", "bike", "จักรยาน", "trip", "beach", "ทะเล",
   ],
-  other: [],
+  Other: [],
 };
 
 const DAY_WORDS: Array<[DayWithin, string[]]> = [
@@ -175,7 +171,7 @@ export function interpretQuery(rawQuery: string): Interpretation {
   // Thai compound tokens don't resurface as redundant keyword chips.
   const consumed: string[] = [];
 
-  const categories = (Object.keys(CATEGORY_WORDS) as Category[]).filter((c) =>
+  const categories = Object.keys(CATEGORY_WORDS).filter((c) =>
     includesAny(q, CATEGORY_WORDS[c])
   );
   if (categories.length > 0) {
@@ -183,13 +179,13 @@ export function interpretQuery(rawQuery: string): Interpretation {
     if (term) consumed.push(term);
     if (categories.length > 1)
       notes.push(
-        `Several categories matched — using ${CATEGORY_LABELS[categories[0]]}. Remove the chip to widen.`
+        `Several categories matched — using ${categories[0]}. Remove the chip to widen.`
       );
     filters.category = categories[0];
     chips.push({
       id: "category",
       field: "category",
-      label: CATEGORY_LABELS[categories[0]],
+      label: categories[0],
       value: categories[0],
     });
     // Keep specific activities ("แบด", "karaoke") as an extra keyword chip so
@@ -297,46 +293,53 @@ export function interpretQuery(rawQuery: string): Interpretation {
 
 /* ------------------------------ filter helpers ----------------------------- */
 
-export function partyMatchesDay(party: Party, dayWithin: DayWithin, now = new Date()): boolean {
-  const start = combineDateTime(party.date, party.time);
-  if (start.getTime() < now.getTime() - 60_000) return false;
-  const todayKey = toDateKey(now);
-  const partyDay = party.date;
+export function partyMatchesDay(
+  party: PartySummary,
+  dayWithin: DayWithin,
+  now = Date.now()
+): boolean {
+  const start = new Date(party.timeStart).getTime();
+  if (start < now - 60_000) return false;
   switch (dayWithin) {
     case "today":
-      return partyDay === todayKey;
+      return bangkokDayKey(party.timeStart) === daysFromToday(0);
     case "tomorrow":
-      return partyDay === daysFromToday(1);
+      return bangkokDayKey(party.timeStart) === daysFromToday(1);
     case "weekend": {
-      const day = start.getDay();
-      const withinWeek = start.getTime() - now.getTime() <= 7 * 86400_000;
+      const day = bangkokWeekday(party.timeStart);
+      const withinWeek = start - now <= 7 * 86_400_000;
       return withinWeek && (day === 6 || day === 0);
     }
     case "this_week":
-      return start.getTime() - now.getTime() <= 7 * 86400_000;
+      return start - now <= 7 * 86_400_000;
   }
 }
 
-export function partyMatchesTimeOfDay(party: Party, timeOfDay: TimeOfDay): boolean {
-  const hour = Number(party.time.split(":")[0]);
+export function partyMatchesTimeOfDay(party: PartySummary, timeOfDay: TimeOfDay): boolean {
+  const hour = bangkokHour(party.timeStart);
   if (timeOfDay === "morning") return hour < 12;
   if (timeOfDay === "afternoon") return hour >= 12 && hour < 17;
   return hour >= 17;
 }
 
-export function partyMatchesText(party: Party, keywords: string[]): boolean {
+export function partyMatchesText(party: PartySummary, keywords: string[]): boolean {
   if (keywords.length === 0) return true;
   const haystack = [
     party.title,
-    party.description,
+    party.description ?? "",
     party.location,
-    party.area,
-    party.interests.join(" "),
-    party.category,
+    inferArea(party.location),
+    party.tags.map((tag) => tag.name).join(" "),
+    party.categoryName ?? "",
   ]
     .join(" ")
     .toLowerCase();
   return keywords.every((kw) => haystack.includes(kw.toLowerCase()));
+}
+
+/** Effective cost for filter comparisons: NULL (free) counts as 0. */
+function partyCost(party: PartySummary): number {
+  return party.budgetPerPerson ?? 0;
 }
 
 /**
@@ -344,27 +347,28 @@ export function partyMatchesText(party: Party, keywords: string[]): boolean {
  * and not already joined or requested (those live in My Activities instead).
  */
 export function applyFilters(
-  parties: Party[],
+  parties: PartySummary[],
   filters: PartyFilters,
-  now = new Date()
-): Party[] {
+  viewerId: string,
+  now = Date.now()
+): PartySummary[] {
   const keywords = (filters.text ?? "").split(" ").filter(Boolean);
   return parties.filter((party) => {
-    if (party.creatorId === "me") return false;
-    if (party.participants.some((p) => p.profileId === "me")) return false;
-    if (isPast(party.date, party.time, now)) return false;
-    if (filters.category && party.category !== filters.category) return false;
+    if (party.organiserId === viewerId) return false;
+    if (party.participants.some((p) => p.id === viewerId)) return false;
+    if (isPast(party.timeStart, now)) return false;
+    if (filters.category && party.categoryName !== filters.category) return false;
     if (filters.dayWithin && !partyMatchesDay(party, filters.dayWithin, now)) return false;
     if (filters.timeOfDay && !partyMatchesTimeOfDay(party, filters.timeOfDay)) return false;
-    if (filters.budgetMax !== undefined && party.budgetPerPerson > filters.budgetMax) return false;
+    if (filters.budgetMax !== undefined && partyCost(party) > filters.budgetMax) return false;
     if (filters.minSpots !== undefined) {
-      const accepted = party.participants.filter((p) => p.status === "accepted").length;
-      if (spotsLeft(party.capacity, accepted) < filters.minSpots) return false;
+      const accepted = approvedParticipants(party).length;
+      if (spotsLeft(party.maxSlots, accepted) < filters.minSpots) return false;
     }
     if (filters.area) {
       const area = filters.area.toLowerCase();
       if (
-        !party.area.toLowerCase().includes(area) &&
+        !inferArea(party.location).toLowerCase().includes(area) &&
         !party.location.toLowerCase().includes(area)
       )
         return false;
@@ -376,27 +380,31 @@ export function applyFilters(
 /* --------------------------- ranking & explanations ------------------------- */
 
 export interface RankedParty {
-  party: Party;
+  party: PartySummary;
   score: number;
   reasons: string[];
 }
 
+/**
+ * Reasons are derived deterministically from retrieved fields only — never
+ * invented.
+ */
 export function rankMatches(
-  parties: Party[],
+  parties: PartySummary[],
   filters: PartyFilters,
-  currentProfile: Profile | undefined,
-  now = new Date()
+  viewer: ProfileSummary | undefined,
+  now = Date.now()
 ): RankedParty[] {
   const keywords = (filters.text ?? "").split(" ").filter(Boolean);
-  const interests = new Set((currentProfile?.interests ?? []).map((i) => i.toLowerCase()));
+  const viewerTags = new Set((viewer?.tags ?? []).map((tag) => tag.name.toLowerCase()));
 
   const ranked = parties.map((party) => {
     const reasons: string[] = [];
     let score = 0;
 
-    if (filters.category && party.category === filters.category) {
+    if (filters.category && party.categoryName === filters.category) {
       score += 30;
-      reasons.push(`Matches ${CATEGORY_LABELS[party.category]}`);
+      reasons.push(`Matches ${party.categoryName}`);
     }
     for (const kw of keywords) {
       if (partyMatchesText(party, [kw])) {
@@ -405,10 +413,10 @@ export function rankMatches(
       }
     }
     if (filters.budgetMax !== undefined) {
-      if (party.budgetPerPerson <= filters.budgetMax) {
+      if (partyCost(party) <= filters.budgetMax) {
         score += 6;
         reasons.push(
-          party.budgetPerPerson === 0
+          party.budgetPerPerson === null
             ? "Free activity"
             : `Within budget (${formatBudget(party.budgetPerPerson)} ≤ ${formatBudget(filters.budgetMax)})`
         );
@@ -426,18 +434,21 @@ export function rankMatches(
     }
     if (filters.area) {
       const area = filters.area.toLowerCase();
-      if (party.area.toLowerCase().includes(area) || party.location.toLowerCase().includes(area)) {
+      if (
+        inferArea(party.location).toLowerCase().includes(area) ||
+        party.location.toLowerCase().includes(area)
+      ) {
         score += 8;
-        reasons.push(`In ${party.area}`);
+        reasons.push(`In ${inferArea(party.location)}`);
       }
     }
-    const overlap = party.interests.filter((i) => interests.has(i.toLowerCase()));
+    const overlap = party.tags.filter((tag) => viewerTags.has(tag.name.toLowerCase()));
     if (overlap.length > 0) {
       score += 8 * Math.min(overlap.length, 2);
-      reasons.push(`Shares your interest: ${overlap[0]}`);
+      reasons.push(`Shares your interest: ${overlap[0].name}`);
     }
-    const accepted = party.participants.filter((p) => p.status === "accepted").length;
-    const left = spotsLeft(party.capacity, accepted);
+    const accepted = approvedParticipants(party).length;
+    const left = spotsLeft(party.maxSlots, accepted);
     if (!Number.isFinite(left)) {
       reasons.push("Open group — no size limit");
       score += 2;
@@ -454,22 +465,20 @@ export function rankMatches(
 }
 
 export function sortParties(
-  parties: Party[],
+  parties: PartySummary[],
   sort: SortOption,
   ranked?: Map<string, number>
-): Party[] {
+): PartySummary[] {
   const copy = [...parties];
   if (sort === "soonest") {
     return copy.sort(
-      (a, b) =>
-        combineDateTime(a.date, a.time).getTime() - combineDateTime(b.date, b.time).getTime()
+      (a, b) => new Date(a.timeStart).getTime() - new Date(b.timeStart).getTime()
     );
   }
   if (sort === "popularity") {
     return copy.sort(
       (a, b) =>
-        b.participants.filter((p) => p.status === "accepted").length -
-        a.participants.filter((p) => p.status === "accepted").length
+        approvedParticipants(b).length - approvedParticipants(a).length
     );
   }
   return copy.sort(
@@ -480,7 +489,6 @@ export function sortParties(
 /* ------------------------------ chip editing ------------------------------- */
 
 export const CHIP_CYCLES: Partial<Record<ChipField, string[]>> = {
-  category: Object.keys(CATEGORY_LABELS),
   dayWithin: ["today", "tomorrow", "weekend", "this week"],
   timeOfDay: ["morning", "afternoon", "evening"],
   budgetMax: ["100", "200", "300", "500", "0"],
@@ -489,7 +497,7 @@ export const CHIP_CYCLES: Partial<Record<ChipField, string[]>> = {
 export function chipLabelFor(field: ChipField, value: string): string {
   switch (field) {
     case "category":
-      return CATEGORY_LABELS[value as Category] ?? value;
+      return value;
     case "dayWithin":
       return value.replace("_", " ");
     case "budgetMax": {
@@ -511,7 +519,7 @@ export function filtersFromChips(chips: InterpretationChip[]): PartyFilters {
   for (const chip of chips) {
     switch (chip.field) {
       case "category":
-        filters.category = chip.value as Category;
+        filters.category = chip.value;
         break;
       case "dayWithin":
         filters.dayWithin = chip.value as DayWithin;

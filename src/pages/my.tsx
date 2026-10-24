@@ -1,54 +1,89 @@
 import Link from "next/link";
 import Head from "next/head";
+import type { GetServerSideProps } from "next";
 import * as React from "react";
 import { Plus } from "lucide-react";
 
 import { PartyCard } from "@/components/party-card";
-import { EmptyState, LoadingList } from "@/components/state-views";
+import { EmptyState, ErrorState } from "@/components/state-views";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useApp } from "@/lib/data/store";
-import type { Party } from "@/lib/data/types";
+import { createUserServerClient } from "@/lib/supabase/server";
+import { getPartiesByOrganiser } from "@/lib/supabase/queries/get-parties-by-organiser";
+import { getPartiesByParticipant } from "@/lib/supabase/queries/get-parties-by-participant";
+import type { PartySummary } from "@/lib/supabase/queries/types";
 import { isPast } from "@/lib/format";
+import { deriveMyStatus } from "@/lib/participants";
+
+export interface MyActivitiesProps {
+  error: boolean;
+  userId?: string;
+  parties?: PartySummary[];
+}
+
+export const getServerSideProps: GetServerSideProps<MyActivitiesProps> = async ({
+  req,
+  res,
+}) => {
+  const supabase = createUserServerClient(req, res);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { redirect: { destination: "/signin", permanent: false } };
+
+  const [participating, organised] = await Promise.all([
+    getPartiesByParticipant(supabase, user.id),
+    getPartiesByOrganiser(supabase, user.id),
+  ]);
+
+  if (!participating || !organised) {
+    return { props: { error: true, userId: user.id } };
+  }
+
+  // The organiser is also a participant (own approved row) — dedupe by id.
+  const byId = new Map<string, PartySummary>();
+  for (const party of [...organised, ...participating]) byId.set(party.id, party);
+
+  return {
+    props: { error: false, userId: user.id, parties: [...byId.values()] },
+  };
+};
 
 type TabKey = "upcoming" | "past";
 
-export default function MyActivitiesPage() {
-  const { hydrated, parties, getProfile, myStatusFor, currentUserId } = useApp();
+export default function MyActivitiesPage({
+  error,
+  userId = "",
+  parties = [],
+}: MyActivitiesProps) {
   const [tab, setTab] = React.useState<TabKey>("upcoming");
-  const now = React.useMemo(() => new Date(), []);
+  const now = React.useMemo(() => new Date().getTime(), []);
 
-  const bySoonest = (a: Party, b: Party) =>
-    new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime();
+  const bySoonest = (a: PartySummary, b: PartySummary) =>
+    new Date(a.timeStart).getTime() - new Date(b.timeStart).getTime();
 
-  const mine = React.useCallback(
-    (party: Party) => myStatusFor(party) !== "none",
-    [myStatusFor]
-  );
-
-  const lists: Record<TabKey, Party[]> = React.useMemo(
+  const lists: Record<TabKey, PartySummary[]> = React.useMemo(
     () => ({
       upcoming: parties
-        .filter((party) => !isPast(party.date, party.time, now) && mine(party))
+        .filter((party) => !isPast(party.timeStart, now))
         .sort(bySoonest),
       past: parties
-        .filter((party) => isPast(party.date, party.time, now) && mine(party))
+        .filter((party) => isPast(party.timeStart, now))
         .sort((a, b) => bySoonest(b, a)),
     }),
-    [parties, mine, now]
+    [parties, now]
   );
 
-  const renderCards = (cards: Party[]) => (
+  const renderCards = (cards: PartySummary[]) => (
     <ul className="grid gap-3 sm:grid-cols-2">
       {cards.map((party) => {
-        const status = myStatusFor(party);
-        const created = party.creatorId === currentUserId;
+        const status = deriveMyStatus(party, userId);
+        const created = party.organiserId === userId;
         return (
           <li key={party.id}>
             <PartyCard
               party={party}
-              getProfile={getProfile}
-              getMyStatus={myStatusFor}
+              getMyStatus={() => status}
               tone={created ? "primary" : "default"}
               chatHref={`/parties/${party.id}/chat`}
               chatDisabled={status === "requested"}
@@ -59,6 +94,10 @@ export default function MyActivitiesPage() {
       })}
     </ul>
   );
+
+  if (error) {
+    return <ErrorState onRetry={() => window.location.reload()} />;
+  }
 
   return (
     <>
@@ -81,9 +120,7 @@ export default function MyActivitiesPage() {
 
           {(["upcoming", "past"] as TabKey[]).map((key) => (
             <TabsContent key={key} value={key}>
-              {!hydrated ? (
-                <LoadingList />
-              ) : lists[key].length > 0 ? (
+              {lists[key].length > 0 ? (
                 <div className="pt-3">{renderCards(lists[key])}</div>
               ) : (
                 <div className="pt-3">

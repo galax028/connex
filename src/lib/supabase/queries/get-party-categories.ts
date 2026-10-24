@@ -3,12 +3,15 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export async function getPartyCategories(
   supabase: SupabaseClient<Database>,
-): Promise<string[] | null> {
-  const { data, error } = await supabase.from("party_categories").select("name").order("name");
+): Promise<{ id: string; name: string }[] | null> {
+  const { data, error } = await supabase
+    .from("party_categories")
+    .select("id, name")
+    .order("name");
   if (error) {
     console.error("[queries.getPartyCategories]: ", error);
     return null;
   }
 
-  return data.map((category) => category.name);
+  return data.map((category) => ({ id: category.id, name: category.name }));
 }

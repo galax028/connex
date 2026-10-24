@@ -1,6 +1,6 @@
 import type { Database } from "@/lib/supabase/database.types";
 import { mapPartySummary } from "@/lib/supabase/queries/map-party-summary";
-import type { PartySummary } from "@/lib/supabase/queries/types";
+import type { PartyResult, PartySummary } from "@/lib/supabase/queries/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export async function getPartiesByParticipant(
@@ -26,7 +26,7 @@ export async function getPartiesByParticipant(
       created_at,\
       party_categories(name),\
       parties_tags(...tags(id, name)),\
-      parties_users!inner(user_id)\
+      parties_users!inner(user_id, status, created_at, user_profiles(fullname, nickname, profile_url))
       `,
     )
     .eq("parties_users.user_id", userId)
@@ -38,5 +38,5 @@ export async function getPartiesByParticipant(
     return null;
   }
 
-  return data.map(mapPartySummary);
+  return (data as unknown as PartyResult[]).map(mapPartySummary);
 }

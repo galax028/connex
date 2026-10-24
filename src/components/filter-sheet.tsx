@@ -19,17 +19,10 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import type { DayWithin, TimeOfDay } from "@/lib/data/types";
+import type { DayWithin, PartyFilters, TimeOfDay } from "@/lib/filters";
 import { formatBudget } from "@/lib/format";
 
-export interface ManualFilters {
-  category?: import("@/lib/data/types").Category;
-  dayWithin?: DayWithin;
-  timeOfDay?: TimeOfDay;
-  budgetMax?: number;
-  minSpots?: number;
-  area?: string;
-}
+export type ManualFilters = PartyFilters;
 
 const DAY_OPTIONS: Array<{ value: DayWithin; label: string }> = [
   { value: "today", label: "Today" },
@@ -61,12 +54,15 @@ export function FilterSheet({
   open,
   onOpenChange,
   filters,
+  categories,
   onChange,
   onReset,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   filters: ManualFilters;
+  /** DB category names the filter select offers. */
+  categories: string[];
   onChange: (patch: Partial<ManualFilters>) => void;
   onReset: () => void;
 }) {
@@ -91,6 +87,25 @@ export function FilterSheet({
           <SheetDescription>Results below update live as you change filters.</SheetDescription>
         </SheetHeader>
         <div className="flex flex-col gap-4 px-4 pb-2">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="filter-category">Category</Label>
+            <Select
+              value={filters.category ?? null}
+              onValueChange={(value) => onChange({ category: value ?? undefined })}
+            >
+              <SelectTrigger id="filter-category" className="w-full">
+                <SelectValue>{filters.category ?? "Any category"}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {categories.map((category) => (
+                  <SelectItem key={category} value={category}>
+                    {category}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="filter-day">When</Label>
             <Select

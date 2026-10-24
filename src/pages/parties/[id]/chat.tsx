@@ -1,60 +1,64 @@
 import Link from "next/link";
 import Head from "next/head";
+import type { GetServerSideProps } from "next";
 import { useRouter } from "next/router";
 import * as React from "react";
 import { ArrowLeft, Send } from "lucide-react";
 
-import { ParticipantAvatar } from "@/components/participant-avatar";
 import { Button } from "@/components/ui/button";
-import { EmptyState, LoadingList } from "@/components/state-views";
+import { EmptyState } from "@/components/state-views";
 import { Input } from "@/components/ui/input";
-import { useApp } from "@/lib/data/store";
 import { formatMessageTime, plural } from "@/lib/format";
-import { cn } from "cn";
+import { approvedParticipants } from "@/lib/participants";
+import { getParty } from "@/lib/supabase/queries/get-party";
+import type { PartyDetail } from "@/lib/supabase/queries/types";
+import { createUserServerClient } from "@/lib/supabase/server";
 
-function asId(param: string | string[] | undefined): string | undefined {
-  return Array.isArray(param) ? param[0] : param;
+export interface PartyChatProps {
+  notFound: boolean;
+  party?: PartyDetail;
+  userId?: string;
+  canChat?: boolean;
 }
 
-export default function PartyChatPage() {
-  const router = useRouter();
-  const partyId = asId(router.query.id);
+export const getServerSideProps: GetServerSideProps<PartyChatProps> = async ({
+  req,
+  res,
+  params,
+}) => {
+  const supabase = createUserServerClient(req, res);
   const {
-    hydrated,
-    getParty,
-    getProfile,
-    myStatusFor,
-    acceptedParticipants,
-    messagesFor,
-    sendMessage,
-    currentUserId,
-  } = useApp();
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { redirect: { destination: "/signin", permanent: false } };
 
-  const party = hydrated && partyId ? getParty(partyId) : undefined;
-  const messages = partyId ? messagesFor(partyId) : [];
-  const status = party ? myStatusFor(party) : "none";
-  const canChat = status === "joined" || status === "creator";
+  const id = typeof params?.id === "string" ? params.id : undefined;
+  if (!id) return { props: { notFound: true } };
 
-  const [draft, setDraft] = React.useState("");
-  const bottomRef = React.useRef<HTMLDivElement>(null);
+  const party = await getParty(supabase, id);
+  if (!party) return { props: { notFound: true } };
 
-  React.useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: "end" });
-  }, [messages.length, canChat]);
-
-  if (!hydrated) {
-    return (
-      <div className="flex flex-col gap-4" role="status" aria-label="Loading chat">
-        <LoadingList label="Loading chat…" />
-      </div>
+  // Server-side membership gate: organiser or own approved row.
+  const canChat =
+    party.organiserId === user.id ||
+    party.participants.some(
+      (participant) => participant.id === user.id && participant.status === "approved",
     );
-  }
 
-  if (!party || !partyId) {
+  return { props: { notFound: false, party, userId: user.id, canChat } };
+};
+
+export default function PartyChatPage({
+  notFound,
+  party,
+  userId = "",
+  canChat = false,
+}: PartyChatProps) {
+  if (notFound || !party) {
     return (
       <EmptyState
-        title={router.isReady ? "Chat not found" : "Loading…"}
-        body={router.isReady ? "This plan may have been removed." : undefined}
+        title="Chat not found"
+        body="This plan may have been removed."
         actions={
           <Button variant="outline" render={<Link href="/" />}>
             <ArrowLeft data-icon="inline-start" aria-hidden="true" />
@@ -66,11 +70,14 @@ export default function PartyChatPage() {
   }
 
   if (!canChat) {
+    const requested = party.participants.some(
+      (participant) => participant.id === userId && participant.status === "pending",
+    );
     return (
       <EmptyState
         title="Group chat is for confirmed members"
         body={
-          status === "requested"
+          requested
             ? "Your join request is pending — the chat opens once the organiser approves you."
             : "Request to join this party first; the chat opens once you're confirmed."
         }
@@ -84,12 +91,83 @@ export default function PartyChatPage() {
     );
   }
 
-  const accepted = acceptedParticipants(party);
+  return <PartyChatView key={party.id} party={party} userId={userId} />;
+}
+
+interface ChatMessage {
+  id: string;
+  body: string;
+  createdAt: string;
+}
+
+const chatStorageKey = (partyId: string) => `connex.chat.${partyId}`;
+
+/**
+ * Chat stays local-only (no messages table): messages persist per-browser in
+ * localStorage, keyed by party.
+ */
+function useLocalMessages(partyId: string, userId: string) {
+  const [messages, setMessages] = React.useState<ChatMessage[]>([]);
+
+  React.useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(chatStorageKey(partyId));
+      const parsed: unknown = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(parsed)) {
+        /* eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is only readable after mount */
+        setMessages(
+          parsed.filter(
+            (m): m is ChatMessage =>
+              !!m &&
+              typeof (m as ChatMessage).id === "string" &&
+              typeof (m as ChatMessage).body === "string" &&
+              typeof (m as ChatMessage).createdAt === "string",
+          ),
+        );
+      }
+    } catch {
+      // storage unavailable — chat simply starts empty
+    }
+  }, [partyId]);
+
+  const send = (body: string) => {
+    const trimmed = body.trim();
+    if (!trimmed) return;
+    const message: ChatMessage = {
+      id: `m-${userId}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      body: trimmed,
+      createdAt: new Date().toISOString(),
+    };
+    setMessages((prev) => {
+      const next = [...prev, message];
+      try {
+        window.localStorage.setItem(chatStorageKey(partyId), JSON.stringify(next));
+      } catch {
+        // storage unavailable — message stays in memory for this visit
+      }
+      return next;
+    });
+  };
+
+  return { messages, send };
+}
+
+function PartyChatView({ party, userId }: { party: PartyDetail; userId: string }) {
+  const router = useRouter();
+  const accepted = approvedParticipants(party);
+  const { messages, send } = useLocalMessages(party.id, userId);
+
+  const [draft, setDraft] = React.useState("");
+  const bottomRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    bottomRef.current?.scrollIntoView({ block: "end" });
+  }, [messages.length]);
 
   const onSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!draft.trim()) return;
-    sendMessage(partyId, draft);
+    send(draft);
     setDraft("");
   };
 
@@ -121,41 +199,16 @@ export default function PartyChatPage() {
           />
         ) : (
           <ol className="flex flex-col gap-2.5 py-2" aria-label="Chat messages">
-            {messages.map((message) => {
-              const mine = message.authorId === currentUserId;
-              const author = getProfile(message.authorId);
-              return (
-                <li
-                  key={message.id}
-                  className={cn("flex items-end gap-2", mine && "flex-row-reverse")}
-                >
-                  {!mine ? <ParticipantAvatar profile={author} size="sm" /> : null}
-                  <div
-                    className={cn(
-                      "flex max-w-[78%] flex-col gap-0.5 rounded-2xl px-3.5 py-2",
-                      mine
-                        ? "rounded-br-sm bg-primary text-primary-foreground"
-                        : "rounded-bl-sm bg-card ring-1 ring-foreground/10"
-                    )}
-                  >
-                    {!mine ? (
-                      <span className="text-xs font-medium text-muted-foreground">
-                        {author?.name ?? "Unknown"}
-                      </span>
-                    ) : null}
-                    <p className="text-sm leading-snug whitespace-pre-wrap">{message.body}</p>
-                    <span
-                      className={cn(
-                        "text-[0.65rem]",
-                        mine ? "text-primary-foreground/70" : "text-muted-foreground"
-                      )}
-                    >
-                      {formatMessageTime(message.createdAt)}
-                    </span>
-                  </div>
-                </li>
-              );
-            })}
+            {messages.map((message) => (
+              <li key={message.id} className="flex items-end justify-end gap-2">
+                <div className="flex max-w-[78%] flex-col gap-0.5 rounded-2xl rounded-br-sm bg-primary px-3.5 py-2 text-primary-foreground">
+                  <p className="text-sm leading-snug whitespace-pre-wrap">{message.body}</p>
+                  <span className="text-[0.65rem] text-primary-foreground/70">
+                    {formatMessageTime(message.createdAt)}
+                  </span>
+                </div>
+              </li>
+            ))}
             <div ref={bottomRef} />
           </ol>
         )}

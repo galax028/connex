@@ -9,7 +9,10 @@ import {
   participantCountLabel,
 } from "@/components/participant-avatar";
 import { formatBudgetPerPerson, formatWhen, isPast } from "@/lib/format";
-import type { Party, Profile } from "@/lib/data/types";
+import { inferArea } from "@/lib/areas";
+import type { MyStatus } from "@/lib/participants";
+import { approvedParticipants } from "@/lib/participants";
+import type { PartySummary } from "@/lib/supabase/queries/types";
 import { cn } from "cn";
 import { Badge } from "@/components/ui/badge";
 import { CircleCheck, Clock3, Hourglass, MessageCircle } from "lucide-react";
@@ -18,7 +21,6 @@ export type PartyCardTone = "default" | "ai" | "compact";
 
 export function PartyCard({
   party,
-  getProfile,
   getMyStatus,
   aiReason,
   tone = "default",
@@ -27,9 +29,8 @@ export function PartyCard({
   nonInteractive,
   className,
 }: {
-  party: Party;
-  getProfile: (id: string) => Profile | undefined;
-  getMyStatus?: (party: Party) => "none" | "requested" | "joined" | "creator";
+  party: PartySummary;
+  getMyStatus?: (party: PartySummary) => MyStatus;
   aiReason?: string;
   /** "primary" rethemes the card in the brand pink (e.g. plans you created). */
   tone?: "default" | "primary";
@@ -40,9 +41,9 @@ export function PartyCard({
   nonInteractive?: boolean;
   className?: string;
 }) {
-  const accepted = party.participants.filter((p) => p.status === "accepted");
-  const past = isPast(party.date, party.time);
-  const full = party.capacity !== null && accepted.length >= party.capacity;
+  const accepted = approvedParticipants(party);
+  const past = isPast(party.timeStart);
+  const full = party.maxSlots !== null && accepted.length >= party.maxSlots;
   const myStatus = getMyStatus?.(party) ?? "none";
   const href = `/parties/${party.id}`;
 
@@ -58,7 +59,7 @@ export function PartyCard({
       )}
     >
       <div className="flex items-center gap-2 px-4">
-        <CategoryChip category={party.category} />
+        <CategoryChip category={party.categoryName} />
         {myStatus === "joined" ? (
           <Badge variant="secondary" className="gap-1">
             <CircleCheck aria-hidden="true" /> Joined
@@ -91,7 +92,7 @@ export function PartyCard({
           )}
         </h3>
         <p className="text-sm text-muted-foreground">
-          {formatWhen(party.date, party.time)} · {party.area}
+          {formatWhen(party.timeStart)} · {inferArea(party.location)}
         </p>
       </div>
 
@@ -110,7 +111,6 @@ export function PartyCard({
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
           <ParticipantStack
             participants={accepted}
-            getProfile={getProfile}
             hrefs={!nonInteractive}
             className="relative z-10"
           />
@@ -122,7 +122,7 @@ export function PartyCard({
                 full ? "font-medium text-foreground" : "text-muted-foreground"
               )}
             >
-              {participantCountLabel(party.participants, party.capacity)}
+              {participantCountLabel(party.participants, party.maxSlots)}
             </span>
           </div>
         </div>

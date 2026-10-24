@@ -70,7 +70,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           Start a plan
         </Button>
         <p className="px-1 text-xs text-muted-foreground">
-          Interactive prototype — all data is mock, stored in your browser.
+          Live data from your CU account — sign out from your profile to switch.
         </p>
       </aside>
 

@@ -1,6 +1,7 @@
 import * as React from "react";
 import dynamic from "next/dynamic";
 import Head from "next/head";
+import type { GetServerSideProps } from "next";
 import { useRouter } from "next/router";
 import { PartyCard } from "@/components/party-card";
 import { ErrorState } from "@/components/state-views";
@@ -18,16 +19,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { INTEREST_TAGS } from "@/lib/api/interests";
-import { CREATED_PARTY_FLAG, useApp } from "@/lib/data/store";
-import {
-  CATEGORIES,
-  CATEGORY_LABELS,
-  type Category,
-  type MapPin,
-  type Party,
-} from "@/lib/data/types";
-import { combineDateTime, daysFromToday } from "@/lib/format";
+import { inferArea } from "@/lib/areas";
+import { CREATED_PARTY_FLAG } from "@/lib/created-party";
+import type { MapPin } from "@/lib/filters";
+import { daysFromToday, toBangkokIso } from "@/lib/format";
+import { createBrowserClient } from "@/lib/supabase/client";
+import { getPartyCategories } from "@/lib/supabase/queries/get-party-categories";
+import { getTags } from "@/lib/supabase/queries/get-tags";
+import { getProfile } from "@/lib/supabase/queries/get-profile";
+import type {
+  PartySummary,
+  ProfileSummary,
+} from "@/lib/supabase/queries/types";
+import { formatPointColumn } from "@/lib/supabase/queries/map-party-summary";
+import { createUserServerClient } from "@/lib/supabase/server";
 import { cn } from "cn";
 import { ArrowLeft, CalendarPlus, Eye } from "lucide-react";
 
@@ -38,6 +43,45 @@ const MapPinPicker = dynamic(
     loading: () => <div className="h-56 w-full rounded-xl border bg-muted sm:h-64" />,
   },
 );
+
+export interface CreatePartyProps {
+  error: boolean;
+  userId?: string;
+  me?: ProfileSummary | null;
+  categories?: { id: string; name: string }[];
+  tags?: { id: string; name: string }[];
+}
+
+export const getServerSideProps: GetServerSideProps<CreatePartyProps> = async ({
+  req,
+  res,
+}) => {
+  const supabase = createUserServerClient(req, res);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { redirect: { destination: "/signin", permanent: false } };
+
+  const [categories, tags, me] = await Promise.all([
+    getPartyCategories(supabase),
+    getTags(supabase),
+    getProfile(supabase, user.id),
+  ]);
+
+  if (!categories) {
+    return { props: { error: true, userId: user.id } };
+  }
+
+  return {
+    props: {
+      error: false,
+      userId: user.id,
+      me,
+      categories,
+      tags: tags ?? [],
+    },
+  };
+};
 
 type CostMode = "free" | "paid";
 type CrewMode = "limited" | "unlimited";
@@ -69,7 +113,7 @@ const PRESET_COORDS: Record<string, MapPin> = {
 
 interface FormState {
   title: string;
-  category: Category | "";
+  category: string;
   description: string;
   date: string;
   time: string;
@@ -114,9 +158,9 @@ function validate(form: FormState): FormErrors {
   if (!form.date) errors.date = "Pick a date.";
   if (!form.time) errors.time = "Pick a start time.";
   if (form.date && form.time) {
-    const when = combineDateTime(form.date, form.time);
-    if (Number.isNaN(when.getTime())) errors.date = "That date/time doesn't look valid.";
-    else if (when.getTime() < Date.now() - 60_000)
+    const when = new Date(toBangkokIso(form.date, form.time)).getTime();
+    if (Number.isNaN(when)) errors.date = "That date/time doesn't look valid.";
+    else if (when < Date.now() - 60_000)
       errors.date = "Pick a time in the future — this plan should still happen.";
   }
   const location =
@@ -127,11 +171,10 @@ function validate(form: FormState): FormErrors {
   }
   if (form.endTime) {
     if (form.time && form.date) {
-      const start = combineDateTime(form.date, form.time);
-      const end = combineDateTime(form.date, form.endTime);
-      if (!Number.isNaN(end.getTime())) {
-        if (end.getTime() <= start.getTime())
-          errors.endTime = "The end time must be after the start time.";
+      const start = new Date(toBangkokIso(form.date, form.time)).getTime();
+      const end = new Date(toBangkokIso(form.date, form.endTime)).getTime();
+      if (!Number.isNaN(end)) {
+        if (end <= start) errors.endTime = "The end time must be after the start time.";
       } else {
         errors.endTime = "That end time doesn't look valid.";
       }
@@ -152,38 +195,18 @@ function validate(form: FormState): FormErrors {
   return errors;
 }
 
-/** Guesses the approximate area from the meeting point text (used for cards and filters). */
-const AREA_HINTS: Array<[area: string, words: string[]]> = [
-  ["On campus", ["cu sport", "chula", "campus", "จุฬา", "l building", "engineering", " CU "]],
-  ["Sam Yan", ["sam yan", "mitrtown", "สามย่าน"]],
-  ["Siam", ["siam", "paragon", "mbk", "สยาม"]],
-  ["Ari", ["ari", "อารีย์"]],
-  ["Silom", ["silom", "สีลม"]],
-  ["Sukhumvit", ["sukhumvit", "benjakitti", "asok", "สุขุมวิท"]],
-  ["Chatuchak", ["chatuchak", "จตุจักร", "esplanade"]],
-  ["Phra Nakhon", ["phra nakhon", "khao san", "พระนคร", "old town"]],
-];
-
-function inferArea(location: string): string {
-  const l = location.toLowerCase();
-  for (const [area, words] of AREA_HINTS) {
-    if (words.some((word) => l.includes(word))) return area;
-  }
-  return "Elsewhere";
-}
-
-function todayValue(): string {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-export default function CreatePartyPage() {
+export default function CreatePartyPage({
+  error,
+  userId = "",
+  me = null,
+  categories = [],
+  tags = [],
+}: CreatePartyProps) {
   const router = useRouter();
-  const { createParty, hydrated, getProfile, myStatusFor, currentUserId } = useApp();
   const [form, setForm] = React.useState<FormState>(EMPTY_FORM);
   const [errors, setErrors] = React.useState<FormErrors>({});
   const [summaryError, setSummaryError] = React.useState<string | null>(null);
+  const [submitting, setSubmitting] = React.useState(false);
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -191,7 +214,7 @@ export default function CreatePartyPage() {
     setSummaryError(null);
   };
 
-  const onSubmit = (event: React.FormEvent) => {
+  const onSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     const nextErrors = validate(form);
     setErrors(nextErrors);
@@ -203,27 +226,81 @@ export default function CreatePartyPage() {
       document.getElementById(`field-${firstError}`)?.focus();
       return;
     }
-    const party = createParty({
-      title: form.title.trim(),
-      description: form.description.trim(),
-      category: form.category as Category,
-      date: form.date,
-      time: form.time,
-      endTime: form.endTime || undefined,
-      location: form.locationPreset === MEETING_OTHER ? form.location.trim() : form.locationPreset,
-      area: form.locationPreset === MEETING_OTHER ? inferArea(form.location) : form.locationPreset,
-      locationPin: form.pinOnMap && form.mapPin ? form.mapPin : undefined,
-      budgetPerPerson: form.costMode === "free" ? 0 : Number(form.budget),
-      capacity: form.crewMode === "unlimited" ? null : Number(form.capacity),
-      requiresApproval: form.requiresApproval,
-      interests: form.interests,
-    });
+
+    setSubmitting(true);
     try {
-      window.sessionStorage.setItem(CREATED_PARTY_FLAG, party.id);
-    } catch {
-      // storage unavailable — the details page simply skips the toast
+      const supabase = createBrowserClient();
+
+      const categoryId = categories.find((c) => c.name === form.category)?.id;
+      const pin = form.pinOnMap && form.mapPin ? form.mapPin : undefined;
+      const paid = form.costMode === "paid";
+
+      const basePayload = {
+        name: form.title.trim(),
+        description: form.description.trim() || null,
+        category_id: categoryId ?? null,
+        time_start: toBangkokIso(form.date, form.time),
+        time_end: form.endTime ? toBangkokIso(form.date, form.endTime) : null,
+        location: form.locationPreset === MEETING_OTHER ? form.location.trim() : form.locationPreset,
+        estimated_cost: paid ? Number(form.budget) : null,
+        approval_required: form.requiresApproval,
+        max_slots: form.crewMode === "limited" ? Number(form.capacity) : null,
+        organiser_id: userId,
+      };
+
+      // PostgREST serializes `point` as "(x,y)" with x=lng, y=lat. If the
+      // coordinate write is rejected, publish without the pin (non-critical).
+      const attempt = async (withPin: boolean) => {
+        const payload = withPin && pin
+          ? { ...basePayload, location_coordinates: formatPointColumn(pin) }
+          : basePayload;
+        return supabase.from("parties").insert(payload).select("id").single();
+      };
+
+      let result = await attempt(true);
+      if ((result.error || !result.data) && pin) {
+        console.error("[create] pin insert failed, retrying without it:", result.error);
+        result = await attempt(false);
+      }
+
+      if (result.error || !result.data) {
+        setSummaryError("Could not publish the plan. Try again.");
+        return;
+      }
+      const partyId: string = result.data.id;
+
+      // The organiser is a participant: own approved row, matching taken_slots.
+      const { error: joinError } = await supabase.from("parties_users").insert({
+        party_id: partyId,
+        user_id: userId,
+        status: "approved",
+      });
+      if (joinError) {
+        setSummaryError("The plan was published but joining it failed — try again from the plan page.");
+      }
+
+      // Link selected interest tags by id (best effort — metadata only).
+      const tagIds = form.interests
+        .map((name) => tags.find((tag) => tag.name === name)?.id)
+        .filter((id): id is string => id !== undefined);
+      if (tagIds.length > 0) {
+        const { error: tagsError } = await supabase
+          .from("parties_tags")
+          .insert(tagIds.map((tag_id) => ({ party_id: partyId, tag_id })));
+        if (tagsError) {
+          console.error("[create] parties_tags insert failed:", tagsError);
+        }
+      }
+
+      try {
+        window.sessionStorage.setItem(CREATED_PARTY_FLAG, partyId);
+      } catch {
+        // storage unavailable — the details page simply skips the toast
+      }
+      router.push(`/parties/${partyId}`);
+    } finally {
+      setSubmitting(false);
     }
-    router.push(`/parties/${party.id}`);
   };
 
   const resolvedLocation =
@@ -234,34 +311,48 @@ export default function CreatePartyPage() {
       form.locationPreset === MEETING_OTHER ? inferArea(form.location) : form.locationPreset
     ];
 
-  const previewParty: Party = React.useMemo(
+  const previewParty: PartySummary = React.useMemo(
     () => ({
       id: "preview",
       title: form.title.trim() || "Your plan title",
       description: form.description.trim(),
-      category: (form.category || "other") as Category,
-      date: form.date || daysFromToday(1),
-      time: form.time || "18:00",
+      categoryId: categories.find((c) => c.name === form.category)?.id ?? null,
+      categoryName: form.category || null,
+      timeStart: toBangkokIso(form.date || daysFromToday(1), form.time || "18:00"),
+      timeEnd: form.endTime ? toBangkokIso(form.date || daysFromToday(1), form.endTime) : null,
       location: resolvedLocation || "Meeting point",
-      area:
-        form.locationPreset === MEETING_OTHER
-          ? inferArea(form.location)
-          : form.locationPreset || "Elsewhere",
-      budgetPerPerson: form.costMode === "paid" ? Number(form.budget) || 0 : 0,
-      capacity:
+      budgetPerPerson: form.costMode === "paid" ? Number(form.budget) || null : null,
+      approvalRequired: form.requiresApproval,
+      takenSlots: 1,
+      maxSlots:
         form.crewMode === "limited" && Number.isInteger(Number(form.capacity))
           ? Number(form.capacity)
           : null,
-      requiresApproval: form.requiresApproval,
-      creatorId: currentUserId,
-      participants: [
-        { profileId: currentUserId, status: "accepted", joinedAt: new Date().toISOString() },
-      ],
-      interests: form.interests,
+      organiserId: userId,
+      tags: form.interests.map((name) => ({
+        id: tags.find((tag) => tag.name === name)?.id ?? name,
+        name,
+      })),
       createdAt: new Date().toISOString(),
+      participants: me
+        ? [
+            {
+              id: me.id,
+              name: me.name,
+              nickname: me.nickname,
+              profileUrl: me.profileUrl,
+              status: "approved" as const,
+              joinedAt: new Date().toISOString(),
+            },
+          ]
+        : [],
     }),
-    [form, resolvedLocation, currentUserId],
+    [form, resolvedLocation, userId, categories, tags, me],
   );
+
+  if (error) {
+    return <ErrorState onRetry={() => window.location.reload()} />;
+  }
 
   return (
     <>
@@ -310,7 +401,7 @@ export default function CreatePartyPage() {
                 <Field label="Category" error={errors.category} id="field-category">
                   <Select
                     value={form.category === "" ? null : form.category}
-                    onValueChange={(value) => set("category", value as Category)}
+                    onValueChange={(value) => set("category", value ?? "")}
                   >
                     <SelectTrigger
                       id="field-category"
@@ -318,13 +409,13 @@ export default function CreatePartyPage() {
                       aria-invalid={!!errors.category}
                     >
                       <SelectValue>
-                        {form.category ? CATEGORY_LABELS[form.category] : "Select a category"}
+                        {form.category || "Select a category"}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      {CATEGORIES.map((category) => (
-                        <SelectItem key={category} value={category}>
-                          {CATEGORY_LABELS[category]}
+                      {categories.map((category) => (
+                        <SelectItem key={category.id} value={category.name}>
+                          {category.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -358,7 +449,7 @@ export default function CreatePartyPage() {
                   <Input
                     id="field-date"
                     type="date"
-                    min={hydrated ? todayValue() : undefined}
+                    min={daysFromToday(0)}
                     value={form.date}
                     onChange={(e) => set("date", e.target.value)}
                     aria-invalid={!!errors.date}
@@ -430,37 +521,37 @@ export default function CreatePartyPage() {
                       onChange={(e) => set("location", e.target.value)}
                       placeholder="e.g. CU Sport Complex, Court 3"
                       aria-invalid={!!errors.location}
-                    maxLength={120}
-                  />
-                </Field>
-              ) : null}
-              <div className="col-span-2 flex flex-col gap-2">
-                <Label htmlFor="field-pinOnMap" className="cursor-pointer">
-                  <Checkbox
-                    id="field-pinOnMap"
-                    checked={form.pinOnMap}
-                    onCheckedChange={(checked) => {
-                      set("pinOnMap", checked);
-                      if (!checked) set("mapPin", null);
-                    }}
-                  />
-                  Pinpoint the exact spot on a map (optional)
-                </Label>
-                {form.pinOnMap ? (
-                  <MapPinPicker
-                    value={form.mapPin}
-                    onChange={(pin) => set("mapPin", pin)}
-                    center={mapCenter}
-                  />
-                ) : (
-                  <p className="text-xs text-muted-foreground">
-                    Opens a small map you can drag until the center pin sits on the exact spot —
-                    otherwise the crew just sees the meeting point above.
-                  </p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+                      maxLength={120}
+                    />
+                  </Field>
+                ) : null}
+                <div className="col-span-2 flex flex-col gap-2">
+                  <Label htmlFor="field-pinOnMap" className="cursor-pointer">
+                    <Checkbox
+                      id="field-pinOnMap"
+                      checked={form.pinOnMap}
+                      onCheckedChange={(checked) => {
+                        set("pinOnMap", checked);
+                        if (!checked) set("mapPin", null);
+                      }}
+                    />
+                    Pinpoint the exact spot on a map (optional)
+                  </Label>
+                  {form.pinOnMap ? (
+                    <MapPinPicker
+                      value={form.mapPin}
+                      onChange={(pin) => set("mapPin", pin)}
+                      center={mapCenter}
+                    />
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Opens a small map you can drag until the center pin sits on the exact spot —
+                      otherwise the crew just sees the meeting point above.
+                    </p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
 
             <Card size="sm">
               <CardHeader>
@@ -567,19 +658,19 @@ export default function CreatePartyPage() {
                   Help people find this plan through matching — pick what fits.
                 </p>
                 <div className="flex flex-wrap gap-1.5" role="group" aria-label="Interests">
-                  {INTEREST_TAGS.map((interest) => {
-                    const active = form.interests.includes(interest);
+                  {tags.map((tag) => {
+                    const active = form.interests.includes(tag.name);
                     return (
                       <button
-                        key={interest}
+                        key={tag.id}
                         type="button"
                         aria-pressed={active}
                         onClick={() =>
                           set(
                             "interests",
                             active
-                              ? form.interests.filter((i) => i !== interest)
-                              : [...form.interests, interest],
+                              ? form.interests.filter((i) => i !== tag.name)
+                              : [...form.interests, tag.name],
                           )
                         }
                         className={cn(
@@ -589,7 +680,7 @@ export default function CreatePartyPage() {
                             : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground",
                         )}
                       >
-                        {interest}
+                        {tag.name}
                       </button>
                     );
                   })}
@@ -610,8 +701,7 @@ export default function CreatePartyPage() {
               </p>
               <PartyCard
                 party={previewParty}
-                getProfile={getProfile}
-                getMyStatus={myStatusFor}
+                getMyStatus={() => "creator"}
                 nonInteractive
               />
               <Badge variant="outline" className="self-start">
@@ -621,12 +711,12 @@ export default function CreatePartyPage() {
           </div>
 
           <div className="flex flex-col gap-2 lg:col-span-2">
-            <Button type="submit" size="lg">
+            <Button type="submit" size="lg" disabled={submitting}>
               <CalendarPlus data-icon="inline-start" aria-hidden="true" />
-              Create Party
+              {submitting ? "Publishing…" : "Create Party"}
             </Button>
             <p className="text-xs text-muted-foreground">
-              Prototype only — the plan is stored in this browser, not on any server.
+              The plan is published to CONNEX — other students can find and join it.
             </p>
           </div>
         </form>

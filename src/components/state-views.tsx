@@ -117,7 +117,7 @@ export function ErrorState({
     <EmptyState
       icon={<CircleAlert className="size-8" strokeWidth={1.5} />}
       title={title}
-      body={body ?? "This is a prototype — the mock data layer hit an unexpected state."}
+      body={      body ?? "Try again in a moment — if it keeps happening, the service may be down."}
       actions={
         onRetry ? (
           <Button variant="outline" onClick={onRetry}>

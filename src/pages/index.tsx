@@ -1,56 +1,109 @@
 import * as React from "react";
+import type { GetServerSideProps } from "next";
 import Head from "next/head";
 import Link from "next/link";
 import { AiBadge } from "@/components/ai-badge";
 import { CategoryIcon } from "@/components/category-chip";
 import { PartyCard } from "@/components/party-card";
-import { EmptyState, LoadingList } from "@/components/state-views";
+import { EmptyState, ErrorState } from "@/components/state-views";
 import { Button } from "@/components/ui/button";
 import { rankMatches } from "@/lib/ai/interpret";
-import { useApp } from "@/lib/data/store";
-import { CATEGORIES, CATEGORY_LABELS, type Party } from "@/lib/data/types";
+import { createUserServerClient } from "@/lib/supabase/server";
+import { getParties } from "@/lib/supabase/queries/get-parties";
+import { getPartyCategories } from "@/lib/supabase/queries/get-party-categories";
+import { getProfile } from "@/lib/supabase/queries/get-profile";
+import type {
+  PartySummary,
+  ProfileSummary,
+} from "@/lib/supabase/queries/types";
 import { isPast } from "@/lib/format";
+import { approvedParticipants } from "@/lib/participants";
 import { ChevronRight, Plus, Search } from "lucide-react";
 
-export default function HomePage() {
-  const { hydrated, parties, profiles, getProfile, myStatusFor, currentUserId } = useApp();
-  const me = profiles.find((p) => p.id === currentUserId);
+export interface HomeProps {
+  error: boolean;
+  userId?: string;
+  parties?: PartySummary[];
+  me?: ProfileSummary | null;
+  categories?: string[];
+}
 
-  const now = React.useMemo(() => new Date(), []);
+export const getServerSideProps: GetServerSideProps<HomeProps> = async ({
+  req,
+  res,
+}) => {
+  const supabase = createUserServerClient(req, res);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { redirect: { destination: "/signin", permanent: false } };
+
+  const [parties, me, categories] = await Promise.all([
+    getParties(supabase),
+    getProfile(supabase, user.id),
+    getPartyCategories(supabase),
+  ]);
+
+  if (!parties) {
+    return { props: { error: true, userId: user.id } };
+  }
+
+  return {
+    props: {
+      error: false,
+      userId: user.id,
+      parties,
+      me,
+      categories: (categories ?? []).map((category) => category.name),
+    },
+  };
+};
+
+export default function HomePage({
+  error,
+  userId = "",
+  parties = [],
+  me = null,
+  categories = [],
+}: HomeProps) {
+  const now = React.useMemo(() => new Date().getTime(), []);
 
   const discoverable = React.useMemo(
     () =>
       parties.filter(
         (party) =>
-          !isPast(party.date, party.time, now) &&
-          party.creatorId !== currentUserId &&
-          !party.participants.some((p) => p.profileId === currentUserId),
+          !isPast(party.timeStart, now) &&
+          party.organiserId !== userId &&
+          !party.participants.some((p) => p.id === userId),
       ),
-    [parties, currentUserId, now],
+    [parties, userId, now],
   );
 
-  const aiPicks = React.useMemo(() => {
-    if (!hydrated) return [];
-    return rankMatches(discoverable, {}, me, now)
-      .filter((r) => {
-        const accepted = r.party.participants.filter((p) => p.status === "accepted").length;
-        return r.party.capacity === null || accepted < r.party.capacity;
-      })
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 5);
-  }, [discoverable, me, hydrated, now]);
+  const aiPicks = React.useMemo(
+    () =>
+      rankMatches(discoverable, {}, me ?? undefined, now)
+        .filter((r) => {
+          const accepted = approvedParticipants(r.party).length;
+          return r.party.maxSlots === null || accepted < r.party.maxSlots;
+        })
+        .slice(0, 5),
+    [discoverable, me, now],
+  );
 
   const upcoming = React.useMemo(
     () =>
-      discoverable
-        .filter((p) => !p.participants.some((x) => x.profileId === currentUserId))
+      [...discoverable]
         .sort(
           (a, b) =>
-            new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime(),
+            new Date(a.timeStart).getTime() - new Date(b.timeStart).getTime(),
         )
         .slice(0, 6),
-    [discoverable, currentUserId],
+    [discoverable],
   );
+
+  if (error) {
+    return <ErrorState onRetry={() => window.location.reload()} />;
+  }
 
   return (
     <>
@@ -91,37 +144,31 @@ export default function HomePage() {
                   Ask AI <ChevronRight aria-hidden="true" />
                 </Button>
               </div>
-              {hydrated ? (
-                aiPicks.length > 0 ? (
-                  <ul className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-2">
-                    {aiPicks.map(({ party, reasons }) => (
-                      <li
-                        key={party.id}
-                        className="flex w-[17.5rem] shrink-0 snap-start"
-                      >
-                        <PartyCard
-                          party={party}
-                          getProfile={getProfile}
-                          getMyStatus={myStatusFor}
-                          aiReason={reasons[0]}
-                          className="h-full"
-                        />
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <EmptyState
-                    title="No recommendations yet"
-                    body="Add interests to your profile so suggestions can be based on what you like."
-                    actions={
-                      <Button variant="outline" render={<Link href="/profile" />}>
-                        Edit interests
-                      </Button>
-                    }
-                  />
-                )
+              {aiPicks.length > 0 ? (
+                <ul className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-2">
+                  {aiPicks.map(({ party, reasons }) => (
+                    <li
+                      key={party.id}
+                      className="flex w-[17.5rem] shrink-0 snap-start"
+                    >
+                      <PartyCard
+                        party={party}
+                        aiReason={reasons[0]}
+                        className="h-full"
+                      />
+                    </li>
+                  ))}
+                </ul>
               ) : (
-                <LoadingList />
+                <EmptyState
+                  title="No recommendations yet"
+                  body="Add interests to your profile so suggestions can be based on what you like."
+                  actions={
+                    <Button variant="outline" render={<Link href="/profile" />}>
+                      Edit interests
+                    </Button>
+                  }
+                />
               )}
             </section>
 
@@ -134,29 +181,25 @@ export default function HomePage() {
                   Browse all <ChevronRight aria-hidden="true" />
                 </Button>
               </div>
-              {hydrated ? (
-                upcoming.length > 0 ? (
-                  <ul className="grid gap-3 sm:grid-cols-2">
-                    {upcoming.map((party) => (
-                      <li key={party.id}>
-                        <PartyCard party={party} getProfile={getProfile} getMyStatus={myStatusFor} className="h-full" />
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <EmptyState
-                    title="Nothing upcoming yet"
-                    body="Be the one who gets the group together."
-                    actions={
-                      <Button render={<Link href="/create" />}>
-                        <Plus data-icon="inline-start" aria-hidden="true" />
-                        Start a plan
-                      </Button>
-                    }
-                  />
-                )
+              {upcoming.length > 0 ? (
+                <ul className="grid gap-3 sm:grid-cols-2">
+                  {upcoming.map((party) => (
+                    <li key={party.id}>
+                      <PartyCard party={party} className="h-full" />
+                    </li>
+                  ))}
+                </ul>
               ) : (
-                <LoadingList />
+                <EmptyState
+                  title="Nothing upcoming yet"
+                  body="Be the one who gets the group together."
+                  actions={
+                    <Button render={<Link href="/create" />}>
+                      <Plus data-icon="inline-start" aria-hidden="true" />
+                      Start a plan
+                    </Button>
+                  }
+                />
               )}
             </section>
           </div>
@@ -167,19 +210,19 @@ export default function HomePage() {
                 Browse by category
               </h2>
               <ul className="grid grid-cols-2 gap-2.5">
-                {CATEGORIES.map((category) => {
+                {categories.map((category) => {
                   const count = parties.filter(
-                    (p: Party) => p.category === category && !isPast(p.date, p.time, now),
+                    (p) => p.categoryName === category && !isPast(p.timeStart, now),
                   ).length;
                   return (
                     <li key={category}>
                       <Link
-                        href={`/search?category=${category}`}
+                        href={`/search?category=${encodeURIComponent(category)}`}
                         className="flex items-center justify-between rounded-xl border bg-card px-3.5 py-3 text-sm transition-colors outline-none hover:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                       >
                         <span className="flex items-center gap-2 font-medium">
                           <CategoryIcon category={category} />
-                          {CATEGORY_LABELS[category]}
+                          {category}
                         </span>
                         <span className="text-xs text-muted-foreground">{count}</span>
                       </Link>

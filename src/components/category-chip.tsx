@@ -1,24 +1,28 @@
 import Link from "next/link";
 
-import { CATEGORY_LABELS, type Category } from "@/lib/data/types";
 import { cn } from "cn";
 import { Badge } from "@/components/ui/badge";
 
-const CATEGORY_EMOJI: Record<Category, string> = {
-  sports: "🏸",
-  food: "🍜",
-  gaming: "🎮",
-  studying: "📚",
-  arts: "🎨",
-  music: "🎤",
-  outdoor: "🏕️",
-  other: "✨",
+/** DB category names (`party_categories.name`); NULL category renders as "Other". */
+const CATEGORY_EMOJI: Record<string, string> = {
+  Other: "✨",
+  Arts: "🎨",
+  Food: "🍜",
+  Gaming: "🎮",
+  Music: "🎤",
+  Sightseeing: "🏕️",
+  Sports: "🏸",
+  Studying: "📚",
 };
 
-export function CategoryIcon({ category }: { category: Category }) {
+export function categoryLabel(category: string | null): string {
+  return category ?? "Other";
+}
+
+export function CategoryIcon({ category }: { category: string | null }) {
   return (
     <span aria-hidden="true" className="text-sm leading-none">
-      {CATEGORY_EMOJI[category]}
+      {CATEGORY_EMOJI[categoryLabel(category)] ?? "✨"}
     </span>
   );
 }
@@ -29,12 +33,12 @@ export function CategoryChip({
   active,
   className,
 }: {
-  category: Category;
+  category: string | null;
   href?: string;
   active?: boolean;
   className?: string;
 }) {
-  const label = CATEGORY_LABELS[category];
+  const label = categoryLabel(category);
   const content = (
     <Badge
       variant={active ? "default" : "outline"}

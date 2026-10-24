@@ -1,11 +1,6 @@
 import type { Database } from "@/lib/supabase/database.types";
-import { mapParticipant } from "@/lib/supabase/queries/map-participant";
 import { mapPartySummary } from "@/lib/supabase/queries/map-party-summary";
-import type {
-  PartyDetail,
-  PartyDetailResult,
-  PartyParticipant,
-} from "@/lib/supabase/queries/types";
+import type { PartyDetail, PartyResult } from "@/lib/supabase/queries/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export async function getParty(
@@ -29,6 +24,7 @@ export async function getParty(
       max_slots,\
       organiser_id,\
       created_at,\
+      location_coordinates,\
       party_categories(name),\
       parties_tags(...tags(id, name)),\
       parties_users(user_id, status, created_at, user_profiles(fullname, nickname, profile_url))\
@@ -44,10 +40,5 @@ export async function getParty(
   }
   if (!data) return null;
 
-  return {
-    ...mapPartySummary(data as unknown as PartyDetailResult),
-    participants: (data as unknown as PartyDetailResult).parties_users
-      .map(mapParticipant)
-      .filter((participant): participant is PartyParticipant => participant !== null),
-  };
+  return mapPartySummary(data as unknown as PartyResult);
 }

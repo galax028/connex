@@ -1,12 +1,13 @@
 import Link from "next/link";
 import Head from "next/head";
+import type { GetServerSideProps } from "next";
 import { useRouter } from "next/router";
 import * as React from "react";
 import { Info, RotateCcw, Search, Sparkles, X } from "lucide-react";
 
 import { FilterSheet, DAY_OPTIONS, TIME_OPTIONS, type ManualFilters } from "@/components/filter-sheet";
 import { PartyCard } from "@/components/party-card";
-import { DiscoverEmptyState, EmptyState, LoadingList } from "@/components/state-views";
+import { DiscoverEmptyState, EmptyState, ErrorState } from "@/components/state-views";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,13 +20,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useApp } from "@/lib/data/store";
-import {
-  CATEGORIES,
-  CATEGORY_LABELS,
-  type Category,
-  type SortOption,
-} from "@/lib/data/types";
 import {
   applyFilters,
   chipLabelFor,
@@ -35,6 +29,15 @@ import {
   sortParties,
   type InterpretationChip,
 } from "@/lib/ai/interpret";
+import type { SortOption } from "@/lib/filters";
+import { createUserServerClient } from "@/lib/supabase/server";
+import { getParties } from "@/lib/supabase/queries/get-parties";
+import { getPartyCategories } from "@/lib/supabase/queries/get-party-categories";
+import { getProfile } from "@/lib/supabase/queries/get-profile";
+import type {
+  PartySummary,
+  ProfileSummary,
+} from "@/lib/supabase/queries/types";
 import { cn } from "cn";
 import { formatBudget } from "@/lib/format";
 
@@ -52,11 +55,61 @@ const SUGGESTED_PROMPTS = [
   "run tomorrow evening, free",
 ];
 
-export default function SearchPage() {
+export interface SearchProps {
+  error: boolean;
+  userId?: string;
+  parties?: PartySummary[];
+  me?: ProfileSummary | null;
+  categories?: string[];
+}
+
+export const getServerSideProps: GetServerSideProps<SearchProps> = async ({
+  req,
+  res,
+}) => {
+  const supabase = createUserServerClient(req, res);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { redirect: { destination: "/signin", permanent: false } };
+
+  const [parties, me, categories] = await Promise.all([
+    getParties(supabase),
+    getProfile(supabase, user.id),
+    getPartyCategories(supabase),
+  ]);
+
+  if (!parties) {
+    return { props: { error: true, userId: user.id } };
+  }
+
+  return {
+    props: {
+      error: false,
+      userId: user.id,
+      parties,
+      me,
+      categories: (categories ?? []).map((category) => category.name),
+    },
+  };
+};
+
+export default function SearchPage({
+  error,
+  userId = "",
+  parties = [],
+  me = null,
+  categories = [],
+}: SearchProps) {
   const router = useRouter();
-  const { hydrated, parties, getProfile, myStatusFor, profiles, currentUserId } = useApp();
-  const me = profiles.find((p) => p.id === currentUserId);
-  const now = React.useMemo(() => new Date(), []);
+  const now = React.useMemo(() => new Date().getTime(), []);
+
+  const CYCLE_OPTIONS: Record<string, string[] | undefined> = {
+    category: categories,
+    dayWithin: DAY_OPTIONS.map((o) => o.value),
+    timeOfDay: TIME_OPTIONS.map((o) => o.value),
+    budgetMax: ["0", "100", "200", "300", "500"],
+  };
 
   const [mode, setMode] = React.useState<"all" | "ai">("all");
   const initialized = React.useRef(false);
@@ -75,19 +128,23 @@ export default function SearchPage() {
   const [aiError, setAiError] = React.useState<string | null>(null);
   const [aiSubmitted, setAiSubmitted] = React.useState<string | null>(null);
   const processingTimer = React.useRef<number | null>(null);
+  const chipsRef = React.useRef<InterpretationChip[]>([]);
+  React.useEffect(() => {
+    chipsRef.current = chips;
+  }, [chips]);
 
   React.useEffect(() => {
     if (!router.isReady || initialized.current) return;
     initialized.current = true;
-    // One-time init from the URL a link provided (e.g. /search?mode=ai&category=food).
+    // One-time init from the URL a link provided (e.g. /search?mode=ai&category=Food).
     /* eslint-disable react-hooks/set-state-in-effect */
     if (router.query.mode === "ai") setMode("ai");
     const category = router.query.category;
-    if (typeof category === "string" && (CATEGORIES as readonly string[]).includes(category)) {
-      setFilters((prev) => ({ ...prev, category: category as Category }));
+    if (typeof category === "string" && categories.includes(category)) {
+      setFilters((prev) => ({ ...prev, category }));
     }
     /* eslint-enable react-hooks/set-state-in-effect */
-  }, [router.isReady, router.query.mode, router.query.category]);
+  }, [router.isReady, router.query.mode, router.query.category, categories]);
 
   React.useEffect(() => {
     return () => {
@@ -108,14 +165,14 @@ export default function SearchPage() {
   );
 
   const manualResults = React.useMemo(() => {
-    if (!hydrated) return [];
     const filtered = applyFilters(
       parties,
       { ...filters, text: manualKeywordList.join(" ") || undefined },
+      userId,
       now
     );
     return sortParties(filtered, sort, undefined);
-  }, [hydrated, parties, filters, manualKeywordList, sort, now]);
+  }, [parties, filters, manualKeywordList, sort, userId, now]);
 
   const activeFilterCount = Object.values(filters).filter(Boolean).length;
   const hasManualQuery = manualKeywordList.length > 0 || activeFilterCount > 0;
@@ -154,23 +211,24 @@ export default function SearchPage() {
     if (processingTimer.current) window.clearTimeout(processingTimer.current);
     processingTimer.current = window.setTimeout(() => {
       const interpretation = interpretQuery(trimmed);
-      setChips((prevChips) => {
-        if (!isRefinement || prevChips.length === 0) {
-          setAiNotes(interpretation.notes);
-          return interpretation.chips;
-        }
+      const prevChips = chipsRef.current;
+      if (!isRefinement || prevChips.length === 0) {
+        setChips(interpretation.chips);
+        setAiNotes(interpretation.notes);
+      } else {
         const detectedFields = new Set(interpretation.chips.map((c) => c.field));
         const kept = prevChips.filter(
           (chip) =>
-            !detectedFields.has(chip.field) && !(chip.field === "keyword" && interpretation.chips.some((c) => c.field === "keyword"))
+            !detectedFields.has(chip.field) &&
+            !(chip.field === "keyword" && interpretation.chips.some((c) => c.field === "keyword")),
         );
         const merged = [...kept, ...interpretation.chips];
+        setChips(merged);
         setAiNotes([
           ...interpretation.notes,
           `Refined on top of ${kept.length} kept chip${kept.length === 1 ? "" : "s"} from your earlier request.`,
         ]);
-        return merged;
-      });
+      }
       setAiProcessing(false);
     }, 900);
   };
@@ -193,16 +251,18 @@ export default function SearchPage() {
 
   const aiFilters = React.useMemo(() => filtersFromChips(chips), [chips]);
   const aiResults = React.useMemo(() => {
-    if (!hydrated) return [];
-    const filtered = applyFilters(parties, aiFilters, now);
-    const ranked = rankMatches(filtered, aiFilters, me, now);
-    return ranked;
-  }, [hydrated, parties, aiFilters, me, now]);
+    const filtered = applyFilters(parties, aiFilters, userId, now);
+    return rankMatches(filtered, aiFilters, me ?? undefined, now);
+  }, [parties, aiFilters, userId, me, now]);
 
   const aiRelaxActions: Array<{ label: string; onClick: () => void }> = [];
   for (const chip of chips) {
     if (chip.field === "keyword") continue;
     aiRelaxActions.push({ label: `Remove “${chip.label}”`, onClick: () => removeChip(chip.id) });
+  }
+
+  if (error) {
+    return <ErrorState onRetry={() => window.location.reload()} />;
   }
 
   return (
@@ -251,6 +311,7 @@ export default function SearchPage() {
                   open={filterSheetOpen}
                   onOpenChange={setFilterSheetOpen}
                   filters={filters}
+                  categories={categories}
                   onChange={(patch) => setFilters((f) => ({ ...f, ...patch }))}
                   onReset={resetManual}
                 />
@@ -258,9 +319,7 @@ export default function SearchPage() {
 
               <div className="flex items-center justify-between gap-2">
                 <div aria-live="polite" className="text-sm text-muted-foreground">
-                  {hydrated
-                    ? `${manualResults.length} ${manualResults.length === 1 ? "activity" : "activities"}`
-                    : "Loading…"}
+                  {`${manualResults.length} ${manualResults.length === 1 ? "activity" : "activities"}`}
                 </div>
                 <div className="flex items-center gap-2">
                   <Label htmlFor="sort-select" className="text-xs text-muted-foreground">
@@ -285,7 +344,7 @@ export default function SearchPage() {
                 <div className="flex flex-wrap items-center gap-1.5">
                   {filters.category ? (
                     <FilterChip
-                      label={CATEGORY_LABELS[filters.category]}
+                      label={filters.category}
                       onRemove={() => setFilters((f) => ({ ...f, category: undefined }))}
                     />
                   ) : null}
@@ -333,7 +392,7 @@ export default function SearchPage() {
                   >
                     All
                   </Button>
-                  {CATEGORIES.map((category) => (
+                  {categories.map((category) => (
                     <Button
                       key={category}
                       variant={filters.category === category ? "default" : "outline"}
@@ -346,19 +405,17 @@ export default function SearchPage() {
                       }
                       className="shrink-0"
                     >
-                      {CATEGORY_LABELS[category]}
+                      {category}
                     </Button>
                   ))}
                 </div>
               )}
 
-              {!hydrated ? (
-                <LoadingList />
-              ) : manualResults.length > 0 ? (
+              {manualResults.length > 0 ? (
                 <ul className="grid gap-3 sm:grid-cols-2">
                   {manualResults.map((party) => (
                     <li key={party.id}>
-                      <PartyCard party={party} getProfile={getProfile} getMyStatus={myStatusFor} className="h-full" />
+                      <PartyCard party={party} className="h-full" />
                     </li>
                   ))}
                 </ul>
@@ -376,8 +433,8 @@ export default function SearchPage() {
             <div className="flex flex-col gap-3 pt-3">
               <p className="flex items-start gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
                 <Info aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-                Prototype: interpretation is simulated by rules in your browser — no AI service is
-                called, and results come only from real (mock) activity data.
+                Interpretation is simulated by rules in your browser — no AI service is called yet,
+                and results come from real activity data.
               </p>
 
               <form
@@ -455,7 +512,6 @@ export default function SearchPage() {
                     <Sparkles aria-hidden="true" className="size-4 animate-pulse text-primary" />
                     Reading your request… (simulated, prototype)
                   </p>
-                  <LoadingList label="Finding matches…" />
                 </div>
               ) : chips.length > 0 ? (
                 <>
@@ -523,8 +579,6 @@ export default function SearchPage() {
                         <li key={party.id}>
                           <PartyCard
                             party={party}
-                            getProfile={getProfile}
-                            getMyStatus={myStatusFor}
                             aiReason={
                               reasons.length > 0
                                 ? `${reasons[0]}${reasons[1] ? ` · ${reasons[1]}` : ""}`
@@ -579,10 +633,3 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
     </Badge>
   );
 }
-
-const CYCLE_OPTIONS: Record<string, string[] | undefined> = {
-  category: Object.keys(CATEGORY_LABELS),
-  dayWithin: DAY_OPTIONS.map((o) => o.value),
-  timeOfDay: TIME_OPTIONS.map((o) => o.value),
-  budgetMax: ["0", "100", "200", "300", "500"],
-};

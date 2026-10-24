@@ -1,49 +1,97 @@
 import Link from "next/link";
 import Head from "next/head";
+import type { GetServerSideProps } from "next";
 import { useRouter } from "next/router";
 import * as React from "react";
-import { ArrowLeft, EyeOff, Handshake, MessageCircle } from "lucide-react";
-
+import { ArrowLeft, EyeOff, Handshake } from "lucide-react";
 import { ParticipantAvatar } from "@/components/participant-avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { EmptyState, LoadingList } from "@/components/state-views";
-import { useApp } from "@/lib/data/store";
-import { formatWhen, isPast } from "@/lib/format";
+import { EmptyState, ErrorState } from "@/components/state-views";
+import { formatEnrolmentYear, formatWhen, isPast } from "@/lib/format";
+import { getPartiesByOrganiser } from "@/lib/supabase/queries/get-parties-by-organiser";
+import { getPartiesByParticipant } from "@/lib/supabase/queries/get-parties-by-participant";
+import { getProfile } from "@/lib/supabase/queries/get-profile";
+import type {
+  PartySummary,
+  ProfileSummary,
+} from "@/lib/supabase/queries/types";
+import { createUserServerClient } from "@/lib/supabase/server";
 import { cn } from "cn";
 
-function asId(param: string | string[] | undefined): string | undefined {
-  return Array.isArray(param) ? param[0] : param;
+export interface StudentProfileProps {
+  notFound: boolean;
+  error?: boolean;
+  userId?: string;
+  profile?: ProfileSummary;
+  me?: ProfileSummary | null;
+  organised?: PartySummary[];
+  joining?: PartySummary[];
 }
 
-export default function StudentProfilePage() {
-  const router = useRouter();
-  const id = asId(router.query.id);
-  const { hydrated, profiles, parties, getProfile, currentUserId } = useApp();
+export const getServerSideProps: GetServerSideProps<StudentProfileProps> = async ({
+  req,
+  res,
+  params,
+}) => {
+  const supabase = createUserServerClient(req, res);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { redirect: { destination: "/signin", permanent: false } };
 
-  const profile = hydrated && id ? getProfile(id) : undefined;
-  const me = profiles.find((p) => p.id === currentUserId);
+  const id = typeof params?.id === "string" ? params.id : undefined;
+  if (!id) return { props: { notFound: true } };
 
-  if (!hydrated) return <LoadingList label="Loading profile…" />;
-
-  if (id === currentUserId) {
-    return (
-      <EmptyState
-        title="That’s you"
-        body="This link points at your own profile — the prototype keeps it under /profile."
-        actions={
-          <Button render={<Link href="/profile" />}>Open your profile</Button>
-        }
-      />
-    );
+  // The prototype keeps your own profile under /profile.
+  if (id === user.id) {
+    return { redirect: { destination: "/profile", permanent: false } };
   }
 
-  if (!profile || !id) {
+  const [profile, organised, participating, me] = await Promise.all([
+    getProfile(supabase, id),
+    getPartiesByOrganiser(supabase, id),
+    getPartiesByParticipant(supabase, id),
+    getProfile(supabase, user.id),
+  ]);
+
+  if (!profile) return { props: { notFound: true } };
+  if (!organised || !participating) {
+    return { props: { notFound: false, error: true, userId: user.id } };
+  }
+
+  // RLS hides other students' pending rows, so this list is confirmed
+  // memberships only — the desired privacy behavior.
+  const joining = participating.filter((party) => party.organiserId !== id);
+
+  return {
+    props: {
+      notFound: false,
+      userId: user.id,
+      profile,
+      me,
+      organised,
+      joining,
+    },
+  };
+};
+
+export default function StudentProfilePage({
+  notFound,
+  error = false,
+  profile,
+  me = null,
+  organised = [],
+  joining = [],
+}: StudentProfileProps) {
+  const router = useRouter();
+
+  if (notFound || !profile) {
     return (
       <EmptyState
-        title={router.isReady ? "Student not found" : "Loading…"}
-        body={router.isReady ? "This profile doesn't exist in the prototype data." : undefined}
+        title="Student not found"
+        body="This profile doesn't exist."
         actions={
           <Button variant="outline" render={<Link href="/" />}>
             <ArrowLeft data-icon="inline-start" aria-hidden="true" />
@@ -54,20 +102,16 @@ export default function StudentProfilePage() {
     );
   }
 
-  const shared = profile.interests.filter((interest) =>
-    me?.interests.some((mine) => mine.toLowerCase() === interest.toLowerCase())
-  );
-  const created = parties.filter((party) => party.creatorId === profile.id);
-  const participating = parties.filter(
-    (party) =>
-      party.creatorId !== profile.id &&
-      party.participants.some(
-        (p) => p.profileId === profile.id && p.status === "accepted"
-      )
-  );
-  const past = [...created, ...participating].filter((party) =>
-    isPast(party.date, party.time)
-  );
+  if (error) {
+    return <ErrorState onRetry={() => window.location.reload()} />;
+  }
+
+  const myTagNames = new Set((me?.tags ?? []).map((tag) => tag.name.toLowerCase()));
+  const shared = profile.tags.filter((tag) => myTagNames.has(tag.name.toLowerCase()));
+
+  const past = [...organised, ...joining].filter((party) => isPast(party.timeStart));
+
+  const yearLabel = formatEnrolmentYear(profile.enrolmentYear);
 
   return (
     <>
@@ -90,9 +134,12 @@ export default function StudentProfilePage() {
                 <div className="flex min-w-0 flex-col gap-1">
                   <p className="font-heading heading-3 font-semibold">{profile.name}</p>
                   <p className="text-sm text-muted-foreground">
-                    {profile.faculty} · {profile.year}
+                    {profile.facultyName}
+                    {yearLabel ? ` · ${yearLabel}` : ""}
                   </p>
-                  <p className="text-sm text-foreground/90">{profile.bio}</p>
+                  {profile.biography ? (
+                    <p className="text-sm text-foreground/90">{profile.biography}</p>
+                  ) : null}
                 </div>
               </CardContent>
             </Card>
@@ -101,21 +148,28 @@ export default function StudentProfilePage() {
               <h2 id="interests-heading" className="font-heading heading-3 font-semibold">
                 Interests
               </h2>
-              <div className="flex flex-wrap gap-1.5">
-                {profile.interests.map((interest) => {
-                  const isShared = shared.includes(interest);
-                  return (
-                    <Badge key={interest} variant={isShared ? "default" : "secondary"}>
-                      {interest}
-                      {isShared ? " · shared" : ""}
-                    </Badge>
-                  );
-                })}
-              </div>
+              {profile.tags.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {profile.tags.map((tag) => {
+                    const isShared = shared.includes(tag);
+                    return (
+                      <Badge key={tag.id} variant={isShared ? "default" : "secondary"}>
+                        {tag.name}
+                        {isShared ? " · shared" : ""}
+                      </Badge>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No interests added yet.
+                </p>
+              )}
               {shared.length > 0 ? (
                 <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
                   <Handshake aria-hidden="true" className="size-4 text-primary" />
-                  You both like {shared.slice(0, 2).join(" and ")} — an easy icebreaker.
+                  You both like {shared.slice(0, 2).map((tag) => tag.name).join(" and ")} — an easy
+                  icebreaker.
                 </p>
               ) : (
                 <p className="text-sm text-muted-foreground">
@@ -127,13 +181,13 @@ export default function StudentProfilePage() {
 
           <div className="flex min-w-0 flex-col gap-5">
             <ProfilePartyList
-              title={`Hosting (${created.length})`}
-              parties={created}
+              title={`Hosting (${organised.length})`}
+              parties={organised}
               emptyText={`${profile.name} hasn't started a plan yet.`}
             />
             <ProfilePartyList
-              title={`Joining (${participating.length})`}
-              parties={participating}
+              title={`Joining (${joining.length})`}
+              parties={joining}
               emptyText={`${profile.name} hasn't joined any plans yet.`}
             />
 
@@ -145,7 +199,7 @@ export default function StudentProfilePage() {
                 <ul className="flex flex-col gap-1.5">
                   {past.map((party) => (
                     <li key={party.id} className="opacity-75">
-                      <PartyLinkRow partyId={party.id} title={party.title} when={formatWhen(party.date, party.time)} />
+                      <PartyLinkRow partyId={party.id} title={party.title} when={formatWhen(party.timeStart)} />
                     </li>
                   ))}
                 </ul>
@@ -154,7 +208,7 @@ export default function StudentProfilePage() {
 
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <EyeOff aria-hidden="true" className="size-3.5" />
-              Contact details are hidden by mock privacy settings in this prototype.
+              Contact details are not shared in this prototype.
             </p>
           </div>
         </div>
@@ -167,12 +221,10 @@ function PartyLinkRow({
   partyId,
   title,
   when,
-  chatAvailable,
 }: {
   partyId: string;
   title: string;
   when: string;
-  chatAvailable?: boolean;
 }) {
   return (
     <div className="flex items-center gap-3 rounded-xl border bg-card px-3.5 py-2.5">
@@ -185,15 +237,6 @@ function PartyLinkRow({
         </Link>
         <span className="text-xs text-muted-foreground">{when}</span>
       </div>
-      {chatAvailable ? (
-        <Link
-          href={`/parties/${partyId}/chat`}
-          aria-label={`Open chat for ${title}`}
-          className="rounded-lg p-1.5 text-muted-foreground outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
-        >
-          <MessageCircle aria-hidden="true" className="size-4" />
-        </Link>
-      ) : null}
     </div>
   );
 }
@@ -204,7 +247,7 @@ function ProfilePartyList({
   emptyText,
 }: {
   title: string;
-  parties: import("@/lib/data/types").Party[];
+  parties: PartySummary[];
   emptyText: string;
 }) {
   return (
@@ -217,7 +260,7 @@ function ProfilePartyList({
               <PartyLinkRow
                 partyId={party.id}
                 title={party.title}
-                when={formatWhen(party.date, party.time)}
+                when={formatWhen(party.timeStart)}
               />
             </li>
           ))}
