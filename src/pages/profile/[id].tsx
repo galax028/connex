@@ -88,7 +88,7 @@ export default function StudentProfilePage() {
               <CardContent className="flex items-start gap-4 pt-1">
                 <ParticipantAvatar profile={profile} size="lg" />
                 <div className="flex min-w-0 flex-col gap-1">
-                  <p className="font-heading text-lg font-semibold">{profile.name}</p>
+                  <p className="font-heading heading-3 font-semibold">{profile.name}</p>
                   <p className="text-sm text-muted-foreground">
                     {profile.faculty} · {profile.year}
                   </p>
@@ -98,7 +98,7 @@ export default function StudentProfilePage() {
             </Card>
 
             <section aria-labelledby="interests-heading" className="flex flex-col gap-2">
-              <h2 id="interests-heading" className="font-heading text-lg font-semibold">
+              <h2 id="interests-heading" className="font-heading heading-3 font-semibold">
                 Interests
               </h2>
               <div className="flex flex-wrap gap-1.5">
@@ -139,7 +139,7 @@ export default function StudentProfilePage() {
 
             {past.length > 0 ? (
               <section aria-labelledby="past-heading" className="flex flex-col gap-2">
-                <h2 id="past-heading" className="font-heading text-lg font-semibold">
+                <h2 id="past-heading" className="font-heading heading-3 font-semibold">
                   Past activities
                 </h2>
                 <ul className="flex flex-col gap-1.5">
@@ -209,7 +209,7 @@ function ProfilePartyList({
 }) {
   return (
     <section aria-label={title} className="flex flex-col gap-2">
-      <h2 className="font-heading text-lg font-semibold">{title}</h2>
+      <h2 className="font-heading heading-3 font-semibold">{title}</h2>
       {parties.length > 0 ? (
         <ul className="flex flex-col gap-1.5">
           {parties.map((party) => (

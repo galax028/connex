@@ -14,6 +14,9 @@ import { isPast } from "../format";
 
 const STORAGE_KEY = "connex.prototype.v1";
 
+/** sessionStorage flag: the id of a party just created (drives the details-page toast). */
+export const CREATED_PARTY_FLAG = "connex.toast.createdPartyId";
+
 export interface PrivacySettings {
   showFaculty: boolean;
   showYear: boolean;
@@ -25,6 +28,12 @@ interface PersistedState {
   participations: Record<string, { status: Participant["status"]; joinedAt: string }>;
   myMessages: ChatMessage[];
   privacy: PrivacySettings;
+  profileEdits: ProfileEdits;
+}
+
+interface ProfileEdits {
+  bio: string | null;
+  interests: string[] | null;
 }
 
 interface StoreData {
@@ -38,6 +47,7 @@ export interface CreatePartyInput {
   category: Party["category"];
   date: string;
   time: string;
+  endTime?: string;
   location: string;
   area: string;
   budgetPerPerson: number;
@@ -68,6 +78,7 @@ interface AppContextValue {
   sendMessage: (partyId: string, body: string) => void;
   messagesFor: (partyId: string) => ChatMessage[];
   setPrivacy: (key: keyof PrivacySettings, value: boolean) => void;
+  updateProfile: (input: { bio?: string; interests?: string[] }) => void;
 }
 
 const AppContext = React.createContext<AppContextValue | null>(null);
@@ -78,6 +89,7 @@ function emptyPersisted(): PersistedState {
     participations: {},
     myMessages: [],
     privacy: { showFaculty: true, showYear: true, showBio: true },
+    profileEdits: { bio: null, interests: null },
   };
 }
 
@@ -153,6 +165,7 @@ function loadPersisted(): PersistedState {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return emptyPersisted();
     const parsed = JSON.parse(raw) as Partial<PersistedState>;
+    const edits = parsed.profileEdits;
     return {
       createdParties: Array.isArray(parsed.createdParties)
         ? parsed.createdParties
@@ -164,6 +177,12 @@ function loadPersisted(): PersistedState {
         ? parsed.myMessages.map(normalizeMessage).filter((m): m is ChatMessage => m !== null)
         : [],
       privacy: { ...emptyPersisted().privacy, ...parsed.privacy },
+      profileEdits: {
+        bio: typeof edits?.bio === "string" ? edits.bio : null,
+        interests: Array.isArray(edits?.interests)
+          ? (edits?.interests ?? []).filter((i): i is string => typeof i === "string").slice(0, 12)
+          : null,
+      },
     };
   } catch {
     return emptyPersisted();
@@ -189,6 +208,9 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const [data, setData] = React.useState<StoreData>({ parties: [], messages: [] });
   const [privacy, setPrivacyState] = React.useState<PrivacySettings>(
     emptyPersisted().privacy
+  );
+  const [profileEdits, setProfileEdits] = React.useState<ProfileEdits>(
+    emptyPersisted().profileEdits
   );
   const autoApproveTimers = React.useRef<Map<string, number>>(new Map());
   const profilesRef = React.useRef<Profile[]>([]);
@@ -239,13 +261,25 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       };
     });
 
-    profilesRef.current = seed.profiles;
-    setProfiles(seed.profiles);
+    // Apply persisted profile edits (bio, interests) onto the mock user.
+    const profilesWithEdits = seed.profiles.map((profile) =>
+      profile.id === CURRENT_USER_ID
+        ? {
+            ...profile,
+            bio: persisted.profileEdits.bio ?? profile.bio,
+            interests: persisted.profileEdits.interests ?? profile.interests,
+          }
+        : profile
+    );
+
+    profilesRef.current = profilesWithEdits;
+    setProfiles(profilesWithEdits);
     setData({
       parties: [...createdFixtures, ...seedParties],
       messages: [...persisted.myMessages, ...seed.messages],
     });
     setPrivacyState(persisted.privacy);
+    setProfileEdits(persisted.profileEdits);
     setHydrated(true);
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
@@ -261,8 +295,8 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       if (mine) participations[party.id] = { status: mine.status, joinedAt: mine.joinedAt };
     }
     const myMessages = data.messages.filter((m) => m.authorId === CURRENT_USER_ID);
-    savePersisted({ createdParties, participations, myMessages, privacy });
-  }, [data, privacy, hydrated]);
+    savePersisted({ createdParties, participations, myMessages, privacy, profileEdits });
+  }, [data, privacy, profileEdits, hydrated]);
 
   React.useEffect(() => {
     const timers = autoApproveTimers.current;
@@ -425,6 +459,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       const nowIso = new Date().toISOString();
       const party: Party = {
         ...input,
+        endTime: input.endTime || undefined,
         id,
         creatorId: CURRENT_USER_ID,
         participants: [
@@ -509,6 +544,28 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  const updateProfile = React.useCallback(
+    (input: { bio?: string; interests?: string[] }) => {
+      setProfileEdits((prev) => ({
+        bio: input.bio !== undefined ? input.bio : prev.bio,
+        interests: input.interests !== undefined ? input.interests : prev.interests,
+      }));
+      setProfiles((prev) =>
+        prev.map((profile) =>
+          profile.id === CURRENT_USER_ID
+            ? {
+                ...profile,
+                bio: input.bio !== undefined ? input.bio : profile.bio,
+                interests:
+                  input.interests !== undefined ? input.interests : profile.interests,
+              }
+            : profile
+        )
+      );
+    },
+    []
+  );
+
   const value: AppContextValue = {
     hydrated,
     profiles,
@@ -531,6 +588,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     sendMessage,
     messagesFor,
     setPrivacy,
+    updateProfile,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

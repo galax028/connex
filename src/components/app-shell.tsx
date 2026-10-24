@@ -58,7 +58,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col gap-6 border-r bg-sidebar px-4 py-6 lg:flex">
         <Link
           href="/"
-          className="rounded-lg px-3 font-heading text-xl font-semibold tracking-tight text-primary outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          className="rounded-lg px-3 font-heading heading-2 font-semibold tracking-tight text-primary outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         >
           CONNEX
         </Link>

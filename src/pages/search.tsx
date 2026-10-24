@@ -212,7 +212,7 @@ export default function SearchPage() {
       </Head>
       <div className="flex flex-col gap-4">
         <header className="flex flex-col gap-1">
-          <h1 className="font-heading text-2xl font-semibold tracking-tight">Find something to do</h1>
+          <h1 className="font-heading heading-1 font-semibold tracking-tight">Find something to do</h1>
           <p className="text-sm text-muted-foreground">
             Browse everything, or describe your plan in your own words.
           </p>

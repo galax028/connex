@@ -14,7 +14,7 @@ type SeedProfile = Omit<Profile, "initials" | "color">;
 const PROFILES: SeedProfile[] = [
   {
     id: "me",
-    name: "Napat",
+    name: "Mitsuha",
     faculty: "Engineering",
     year: "Year 3",
     bio: "Looking for people to play badminton with after class. Also down for food runs around Sam Yan.",
@@ -166,7 +166,7 @@ export function buildSeed(now = new Date()): SeedData {
       interests: ["bubble tea", "dessert"],
     },
     {
-      id: "p-hotpot",
+      id: "p",
       requiresApproval: true,
       title: "หมูกระทะ Samyan Hotpot Night",
       description:

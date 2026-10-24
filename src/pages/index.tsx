@@ -63,7 +63,7 @@ export default function HomePage() {
       <div className="flex flex-col gap-8">
         <header className="flex flex-col gap-1">
           <p className="text-sm text-muted-foreground">Chulalongkorn University</p>
-          <h1 className="font-heading text-2xl font-semibold tracking-tight">
+          <h1 className="font-heading heading-1 font-semibold tracking-tight">
             Find your crew
           </h1>
           <p className="text-sm text-muted-foreground">
@@ -81,7 +81,7 @@ export default function HomePage() {
 
         <section aria-labelledby="ai-picks-heading" className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-2">
-            <h2 id="ai-picks-heading" className="flex items-center gap-2 font-heading text-lg font-semibold">
+            <h2 id="ai-picks-heading" className="flex items-center gap-2 font-heading heading-3 font-semibold">
               Picked for you
               <AiBadge />
             </h2>
@@ -126,7 +126,7 @@ export default function HomePage() {
         <div className="flex flex-col gap-8 lg:grid lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start lg:gap-10">
           <section aria-labelledby="upcoming-heading" className="flex min-w-0 flex-col gap-3">
             <div className="flex items-center justify-between gap-2">
-              <h2 id="upcoming-heading" className="font-heading text-lg font-semibold">
+              <h2 id="upcoming-heading" className="font-heading heading-3 font-semibold">
                 Happening soon
               </h2>
               <Button variant="ghost" size="sm" render={<Link href="/search" />}>
@@ -161,7 +161,7 @@ export default function HomePage() {
 
           <div className="flex flex-col gap-8 lg:sticky lg:top-6">
             <section aria-labelledby="categories-heading" className="flex flex-col gap-3">
-              <h2 id="categories-heading" className="font-heading text-lg font-semibold">
+              <h2 id="categories-heading" className="font-heading heading-3 font-semibold">
                 Browse by category
               </h2>
               <ul className="grid grid-cols-2 gap-2.5">
@@ -189,7 +189,7 @@ export default function HomePage() {
               aria-labelledby="create-cta-heading"
               className="flex flex-col gap-2 rounded-xl bg-primary/10 px-5 py-5 ring-1 ring-primary/20"
             >
-              <h2 id="create-cta-heading" className="font-heading text-lg font-semibold text-primary">
+              <h2 id="create-cta-heading" className="font-heading heading-3 font-semibold text-primary">
                 Nobody planning it yet?
               </h2>
               <p className="text-sm text-foreground/80">

@@ -105,7 +105,7 @@ export default function PartyChatPage() {
             <ArrowLeft aria-hidden="true" />
           </Button>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate font-heading text-base font-semibold">{party.title}</h1>
+            <h1 className="truncate font-heading heading-4 font-semibold">{party.title}</h1>
             <p className="text-xs text-muted-foreground">
               {plural(accepted.length, "member", "members")} · prototype chat, messages stay in
               your browser

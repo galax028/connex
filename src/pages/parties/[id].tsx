@@ -7,6 +7,7 @@ import {
   Banknote,
   CalendarDays,
   Check,
+  CircleCheck,
   Clock3,
   Hourglass,
   MapPin,
@@ -33,9 +34,9 @@ import {
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState, SuccessBanner } from "@/components/state-views";
-import { useApp } from "@/lib/data/store";
+import { CREATED_PARTY_FLAG, useApp } from "@/lib/data/store";
 import type { Party } from "@/lib/data/types";
-import { formatBudgetPerPerson, formatWhen, isPast } from "@/lib/format";
+import { formatBudgetPerPerson, formatTime, formatWhen, isPast } from "@/lib/format";
 import { cn } from "cn";
 
 function asId(param: string | string[] | undefined): string | undefined {
@@ -112,6 +113,24 @@ function PartyDetailsView({ party }: { party: Party }) {
   const [justRequested, setJustRequested] = React.useState(false);
   const [confirmLeave, setConfirmLeave] = React.useState(false);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
+  const [createdToast, setCreatedToast] = React.useState(false);
+
+  // One-shot toast: flagged by the create page right before redirecting here.
+  React.useEffect(() => {
+    let timer: number | undefined;
+    try {
+      const createdId = window.sessionStorage.getItem(CREATED_PARTY_FLAG);
+      if (createdId && createdId === party.id) {
+        /* eslint-disable-next-line react-hooks/set-state-in-effect -- sessionStorage is only readable after mount */
+        setCreatedToast(true);
+        window.sessionStorage.removeItem(CREATED_PARTY_FLAG);
+        timer = window.setTimeout(() => setCreatedToast(false), 6000);
+      }
+    } catch {
+      // storage unavailable — skip the toast silently
+    }
+    return () => window.clearTimeout(timer);
+  }, [party.id]);
 
   const onJoin = () => {
     setJoinError(null);
@@ -175,7 +194,7 @@ function PartyDetailsView({ party }: { party: Party }) {
             ) : null}
             {isCreator ? <Badge variant="secondary">You’re hosting</Badge> : null}
           </div>
-          <h1 className="font-heading text-2xl font-semibold tracking-tight">{party.title}</h1>
+          <h1 className="font-heading heading-1 font-semibold tracking-tight">{party.title}</h1>
           <p className="text-sm leading-relaxed text-foreground/90">{party.description}</p>
         </header>
 
@@ -183,7 +202,15 @@ function PartyDetailsView({ party }: { party: Party }) {
           <div className="flex min-w-0 flex-col gap-5">
             <Card size="sm">
               <CardContent className="flex flex-col gap-3 pt-1">
-                <DetailRow icon={<CalendarDays aria-hidden="true" />} label="When" value={formatWhen(party.date, party.time)} />
+                <DetailRow
+              icon={<CalendarDays aria-hidden="true" />}
+              label="When"
+              value={
+                party.endTime
+                  ? `${formatWhen(party.date, party.time)} – ${formatTime(party.endTime)}`
+                  : formatWhen(party.date, party.time)
+              }
+            />
                 <DetailRow
                   icon={<MapPin aria-hidden="true" />}
                   label="Where"
@@ -234,7 +261,7 @@ function PartyDetailsView({ party }: { party: Party }) {
             ) : null}
 
         <section aria-labelledby="participants-heading" className="flex flex-col gap-2">
-          <h2 id="participants-heading" className="font-heading text-lg font-semibold">
+          <h2 id="participants-heading" className="font-heading heading-3 font-semibold">
             Crew ({accepted.length})
           </h2>
           <ul className="flex flex-col gap-1.5">
@@ -264,7 +291,7 @@ function PartyDetailsView({ party }: { party: Party }) {
 
         {isCreator && pending.length > 0 ? (
           <section aria-labelledby="requests-heading" className="flex flex-col gap-2">
-            <h2 id="requests-heading" className="font-heading text-lg font-semibold">
+            <h2 id="requests-heading" className="font-heading heading-3 font-semibold">
               Join requests ({pending.length})
             </h2>
             <ul className="flex flex-col gap-2">
@@ -375,6 +402,29 @@ function PartyDetailsView({ party }: { party: Party }) {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {createdToast ? (
+          <div
+            role="status"
+            className="fixed inset-x-4 bottom-24 z-50 mx-auto flex max-w-sm items-start gap-3 rounded-xl border bg-card p-4 shadow-lg animate-in fade-in slide-in-from-bottom-2 duration-300 lg:bottom-6"
+          >
+            <CircleCheck aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-emerald-600" />
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <p className="text-sm font-medium">Plan created</p>
+              <p className="text-xs text-muted-foreground">
+                Your plan is live — people can find it in Discover and Search.
+              </p>
+            </div>
+            <button
+              type="button"
+              aria-label="Dismiss notification"
+              onClick={() => setCreatedToast(false)}
+              className="rounded-lg p-1 text-muted-foreground outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+            >
+              <X aria-hidden="true" className="size-4" />
+            </button>
+          </div>
+        ) : null}
       </div>
     </>
   );

@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { AiBadge } from "@/components/ai-badge";
 import { CategoryChip } from "@/components/category-chip";
 import {
@@ -11,7 +12,7 @@ import { formatBudgetPerPerson, formatWhen, isPast } from "@/lib/format";
 import type { Party, Profile } from "@/lib/data/types";
 import { cn } from "cn";
 import { Badge } from "@/components/ui/badge";
-import { CircleCheck, Clock3, Hourglass } from "lucide-react";
+import { CircleCheck, Clock3, Hourglass, MessageCircle } from "lucide-react";
 
 export type PartyCardTone = "default" | "ai" | "compact";
 
@@ -20,12 +21,23 @@ export function PartyCard({
   getProfile,
   getMyStatus,
   aiReason,
+  tone = "default",
+  chatHref,
+  chatDisabled,
+  nonInteractive,
   className,
 }: {
   party: Party;
   getProfile: (id: string) => Profile | undefined;
   getMyStatus?: (party: Party) => "none" | "requested" | "joined" | "creator";
   aiReason?: string;
+  /** "primary" rethemes the card in the brand pink (e.g. plans you created). */
+  tone?: "default" | "primary";
+  /** When set, the card carries a full-width chat shortcut (My Activities). */
+  chatHref?: string;
+  chatDisabled?: boolean;
+  /** Renders the card without links (e.g. the create-page preview). */
+  nonInteractive?: boolean;
   className?: string;
 }) {
   const accepted = party.participants.filter((p) => p.status === "accepted");
@@ -38,8 +50,10 @@ export function PartyCard({
     <Card
       size="sm"
       className={cn(
-        "relative gap-2.5 pb-0 transition-shadow hover:shadow-md focus-within:ring-3 focus-within:ring-ring/50",
+        "relative gap-2.5 transition-shadow focus-within:ring-3 focus-within:ring-ring/50",
+        !nonInteractive && "hover:shadow-md",
         past && "opacity-70",
+        tone === "primary" && "bg-primary/5 ring-primary/30",
         className
       )}
     >
@@ -64,13 +78,17 @@ export function PartyCard({
       </div>
 
       <div className="flex flex-col gap-1 px-4">
-        <h3 className="line-clamp-2 font-heading text-[0.95rem] leading-snug font-medium">
-          <Link
-            href={href}
-            className="rounded-sm outline-none after:absolute after:inset-0 focus-visible:ring-3 focus-visible:ring-ring/50"
-          >
+        <h3 className="line-clamp-2 font-heading heading-5 font-medium">
+          {nonInteractive ? (
             <span className="relative">{party.title}</span>
-          </Link>
+          ) : (
+            <Link
+              href={href}
+              className="rounded-sm outline-none after:absolute after:inset-0 focus-visible:ring-3 focus-visible:ring-ring/50"
+            >
+              <span className="relative">{party.title}</span>
+            </Link>
+          )}
         </h3>
         <p className="text-sm text-muted-foreground">
           {formatWhen(party.date, party.time)} · {party.area}
@@ -83,27 +101,62 @@ export function PartyCard({
         </p>
       ) : null}
 
-      <div className="mt-auto flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t bg-muted/50 px-4 py-2.5">
-        <ParticipantStack
-          participants={accepted}
-          getProfile={getProfile}
-          className="relative z-10"
-        />
-        <div className="flex flex-col items-end gap-1.5">
-          <span className="text-sm font-medium">{formatBudgetPerPerson(party.budgetPerPerson)}</span>
-          <span
-            className={cn(
-              "text-xs",
-              full ? "font-medium text-foreground" : "text-muted-foreground"
-            )}
-          >
-            {participantCountLabel(party.participants, party.capacity)}
-          </span>
+      <div
+        className={cn(
+          "mt-auto -mb-(--card-spacing) flex flex-col gap-2.5 border-t px-4 py-2.5",
+          tone === "primary" ? "border-primary/20 bg-primary/10" : "bg-muted/50"
+        )}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+          <ParticipantStack
+            participants={accepted}
+            getProfile={getProfile}
+            hrefs={!nonInteractive}
+            className="relative z-10"
+          />
+          <div className="flex flex-col items-end gap-1.5">
+            <span className="text-sm font-medium">{formatBudgetPerPerson(party.budgetPerPerson)}</span>
+            <span
+              className={cn(
+                "text-xs",
+                full ? "font-medium text-foreground" : "text-muted-foreground"
+              )}
+            >
+              {participantCountLabel(party.participants, party.capacity)}
+            </span>
+          </div>
         </div>
+        {chatHref ? (
+          chatDisabled ? (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled
+              aria-label="Chat opens after approval"
+              className="relative z-10 w-full"
+            >
+              <MessageCircle data-icon="inline-start" aria-hidden="true" />
+              Chat opens after approval
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              className="relative z-10 w-full"
+              render={<Link href={chatHref} />}
+              aria-label={`Open chat for ${party.title}`}
+            >
+              <MessageCircle data-icon="inline-start" aria-hidden="true" />
+              Open group chat
+            </Button>
+          )
+        ) : null}
       </div>
-      <Link href={href} className="sr-only">
-        View party details
-      </Link>
+      {!nonInteractive ? (
+        <Link href={href} className="sr-only">
+          View party details
+        </Link>
+      ) : null}
     </Card>
   );
 }

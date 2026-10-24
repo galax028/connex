@@ -1,17 +1,22 @@
 import Link from "next/link";
 import Head from "next/head";
 import * as React from "react";
-import { Eye, EyeOff, MessageCircle, Plus, Settings2 } from "lucide-react";
+import { Check, Eye, EyeOff, MessageCircle, Pencil, Plus, Settings2, X } from "lucide-react";
 
 import { ParticipantAvatar } from "@/components/participant-avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
-import { EmptyState, LoadingList } from "@/components/state-views";
+import { Textarea } from "@/components/ui/textarea";
+import { EmptyState, ErrorState, LoadingList } from "@/components/state-views";
 import { useApp } from "@/lib/data/store";
 import { isPast, plural } from "@/lib/format";
+import { fetchInterestTags } from "@/lib/api/interests";
+import { cn } from "cn";
 
 export default function MyProfilePage() {
   const {
@@ -22,9 +27,40 @@ export default function MyProfilePage() {
     currentUserId,
     privacy,
     setPrivacy,
+    updateProfile,
   } = useApp();
   const me = profiles.find((p) => p.id === currentUserId);
   const now = React.useMemo(() => new Date(), []);
+
+  // Interest tags come from the (simulated) server tag list.
+  const [apiTags, setApiTags] = React.useState<string[] | null>(null);
+  const [tagsError, setTagsError] = React.useState(false);
+  const [tagsRetry, setTagsRetry] = React.useState(0);
+
+  const [editingProfile, setEditingProfile] = React.useState(false);
+  const [bioDraft, setBioDraft] = React.useState<string | null>(null);
+  const [bioError, setBioError] = React.useState<string | null>(null);
+  const [tagDraft, setTagDraft] = React.useState("");
+  const [tagError, setTagError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const tags = await fetchInterestTags();
+        if (!cancelled) {
+          setApiTags(tags);
+          setTagsError(false);
+        }
+      } catch {
+        if (!cancelled) setTagsError(true);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [tagsRetry]);
 
   if (!hydrated || !me) {
     return <LoadingList label="Loading profile…" />;
@@ -38,6 +74,57 @@ export default function MyProfilePage() {
   );
   const created = parties.filter((party) => party.creatorId === currentUserId);
 
+  const saveProfile = () => {
+    const trimmed = (bioDraft ?? "").trim();
+    if (!trimmed) {
+      setBioError("Bio can’t be empty — write a line about yourself.");
+      return;
+    }
+    updateProfile({ bio: trimmed });
+    setBioDraft(null);
+    setBioError(null);
+    setTagDraft("");
+    setTagError(null);
+    setEditingProfile(false);
+  };
+
+  const exitProfileEdit = () => {
+    setEditingProfile(false);
+    setBioDraft(null);
+    setBioError(null);
+    setTagDraft("");
+    setTagError(null);
+  };
+
+  const addTag = (raw: string) => {
+    const tag = raw.trim().toLowerCase();
+    if (!tag) return;
+    if (tag.length > 24) {
+      setTagError("Keep tags under 24 characters.");
+      return;
+    }
+    if (me.interests.some((i) => i.toLowerCase() === tag)) {
+      setTagError(`“${tag}” is already on your profile.`);
+      return;
+    }
+    if (me.interests.length >= 12) {
+      setTagError("Up to 12 tags — remove one first.");
+      return;
+    }
+    updateProfile({ interests: [...me.interests, tag] });
+    setTagDraft("");
+    setTagError(null);
+  };
+
+  const removeTag = (tag: string) => {
+    updateProfile({ interests: me.interests.filter((i) => i !== tag) });
+    setTagError(null);
+  };
+
+  const suggestions = (apiTags ?? [])
+    .filter((tag) => !me.interests.some((i) => i.toLowerCase() === tag))
+    .slice(0, 8);
+
   const privacyRows: Array<{ key: keyof typeof privacy; label: string }> = [
     { key: "showFaculty", label: "Show my faculty & year" },
     { key: "showBio", label: "Show my bio" },
@@ -50,7 +137,7 @@ export default function MyProfilePage() {
       </Head>
       <div className="flex flex-col gap-5">
         <header className="flex flex-col gap-1">
-          <h1 className="font-heading text-2xl font-semibold tracking-tight">Your profile</h1>
+          <h1 className="font-heading heading-1 font-semibold tracking-tight">Your profile</h1>
           <p className="text-sm text-muted-foreground">
             Prototype account — fixed mock user, no real login.
           </p>
@@ -59,22 +146,177 @@ export default function MyProfilePage() {
         <div className="flex flex-col gap-5 lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-10">
           <div className="flex min-w-0 flex-col gap-5">
             <Card size="sm">
-              <CardContent className="flex items-start gap-4 pt-1">
-                <ParticipantAvatar profile={me} size="lg" />
-                <div className="flex min-w-0 flex-col gap-1">
-                  <p className="font-heading text-lg font-semibold">{me.name} (you)</p>
-                  <p className="text-sm text-muted-foreground">
-                    {me.faculty} · {me.year}
-                  </p>
-                  <p className="text-sm text-foreground/90">{me.bio}</p>
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {me.interests.map((interest) => (
-                      <Badge key={interest} variant="secondary">
-                        {interest}
-                      </Badge>
-                    ))}
+              <CardContent className="flex flex-col gap-4 pt-1">
+                <div className="flex items-start gap-4">
+                  <ParticipantAvatar profile={me} size="lg" />
+                  <div className="flex min-w-0 flex-1 flex-col gap-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-heading heading-3 font-semibold">{me.name} (you)</p>
+                        <p className="text-sm text-muted-foreground">
+                          {me.faculty} · {me.year}
+                        </p>
+                      </div>
+                      {editingProfile ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={exitProfileEdit}
+                        >
+                          <X data-icon="inline-start" aria-hidden="true" />
+                          Cancel
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setEditingProfile(true);
+                            setBioDraft(me.bio);
+                            setBioError(null);
+                          }}
+                        >
+                          <Pencil data-icon="inline-start" aria-hidden="true" />
+                          Edit profile
+                        </Button>
+                      )}
+                    </div>
+
+                    {editingProfile ? (
+                      <div className="flex flex-col gap-2">
+                        <Label htmlFor="bio-input">Bio</Label>
+                        <Textarea
+                          id="bio-input"
+                          value={bioDraft ?? ""}
+                          onChange={(event) => {
+                            setBioDraft(event.target.value);
+                            setBioError(null);
+                          }}
+                          maxLength={280}
+                          rows={3}
+                          aria-invalid={!!bioError}
+                          aria-describedby={bioError ? "bio-error" : undefined}
+                        />
+                        {bioError ? (
+                          <p id="bio-error" role="alert" className="text-xs font-medium text-destructive">
+                            {bioError}
+                          </p>
+                        ) : null}
+                        <div className="flex justify-end">
+                          <span className="text-xs text-muted-foreground">{(bioDraft ?? "").length}/280</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-foreground/90">{me.bio}</p>
+                    )}
                   </div>
                 </div>
+
+                <div className="flex flex-col gap-2 border-t pt-4">
+                  <Label id="interests-label">Interests</Label>
+
+                  {me.interests.length > 0 ? (
+                    <ul className="flex flex-wrap gap-1.5" aria-label="Your interests">
+                      {me.interests.map((interest) => (
+                        <li key={interest}>
+                          <Badge variant="outline" className={cn("border-primary gap-1", editingProfile && "pr-1")}>
+                            {interest}
+                            {editingProfile ? (
+                              <button
+                                type="button"
+                                onClick={() => removeTag(interest)}
+                                aria-label={`Remove interest ${interest}`}
+                                className="rounded-full p-0.5 outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50"
+                              >
+                                <X aria-hidden="true" className="size-3" />
+                              </button>
+                            ) : null}
+                          </Badge>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      {editingProfile
+                        ? "No tags yet — add your first one below."
+                        : "No tags yet — edit profile to add what you’re into."}
+                    </p>
+                  )}
+
+                  {editingProfile ? (
+                    <div className="flex flex-col gap-2">
+                      {tagsError ? (
+                        <ErrorState
+                          title="Couldn’t load suggested tags"
+                          body="The tag list didn’t come through. Try again."
+                          onRetry={() => setTagsRetry((n) => n + 1)}
+                        />
+                      ) : apiTags === null ? (
+                        <div className="flex flex-wrap gap-1.5" role="status" aria-label="Loading suggested tags">
+                          <Skeleton className="h-6 w-16 rounded-full" />
+                          <Skeleton className="h-6 w-20 rounded-full" />
+                          <Skeleton className="h-6 w-14 rounded-full" />
+                          <Skeleton className="h-6 w-24 rounded-full" />
+                        </div>
+                      ) : suggestions.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          <span className="sr-only">Suggested tags:</span>
+                          {suggestions.map((tag) => (
+                            <button
+                              key={tag}
+                              type="button"
+                              onClick={() => addTag(tag)}
+                              className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+                            >
+                              <Plus aria-hidden="true" className="mr-0.5 inline size-3" />
+                              {tag}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      <form
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          addTag(tagDraft);
+                        }}
+                        className="flex gap-2"
+                      >
+                        <label htmlFor="tag-input" className="sr-only">
+                          Add a tag
+                        </label>
+                        <Input
+                          id="tag-input"
+                          value={tagDraft}
+                          onChange={(event) => {
+                            setTagDraft(event.target.value);
+                            setTagError(null);
+                          }}
+                          placeholder="Add a tag…"
+                          maxLength={24}
+                          autoComplete="off"
+                          className="h-8"
+                        />
+                        <Button type="submit" size="sm" variant="outline">
+                          <Plus data-icon="inline-start" aria-hidden="true" />
+                          Add
+                        </Button>
+                      </form>
+                      {tagError ? (
+                        <p role="alert" className="text-xs font-medium text-destructive">
+                          {tagError}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+
+                {editingProfile ? (
+                  <Button className="w-full" onClick={saveProfile}>
+                    <Check data-icon="inline-start" aria-hidden="true" />
+                    Save changes
+                  </Button>
+                ) : null}
               </CardContent>
             </Card>
 
@@ -84,7 +326,7 @@ export default function MyProfilePage() {
             </div>
 
             <section aria-labelledby="my-parties-heading" className="flex flex-col gap-2">
-              <h2 id="my-parties-heading" className="font-heading text-lg font-semibold">
+              <h2 id="my-parties-heading" className="font-heading heading-3 font-semibold">
                 Your parties
               </h2>
               {joined.length + created.length > 0 ? (
@@ -184,7 +426,7 @@ function StatTile({ label, value, href }: { label: string; value: string; href: 
       className="flex flex-col gap-0.5 rounded-xl border bg-card px-4 py-3 outline-none transition-colors hover:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
     >
       <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="font-heading text-lg font-semibold">{value}</span>
+      <span className="font-heading heading-3 font-semibold">{value}</span>
     </Link>
   );
 }

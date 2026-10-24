@@ -48,6 +48,8 @@ export interface Party {
   category: Category;
   date: string;
   time: string;
+  /** Optional ending time, same day as `time`. */
+  endTime?: string;
   location: string;
   area: string;
   budgetPerPerson: number;
