@@ -66,7 +66,7 @@ export default function PartyChatPage({
     return (
       <EmptyState
         title="Chat not found"
-        body="This plan may have been removed."
+        body="This party may have been removed."
         actions={
           <Button variant="outline" render={<Link href="/" />}>
             <ArrowLeft data-icon="inline-start" aria-hidden="true" />

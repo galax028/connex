@@ -65,7 +65,7 @@ export function PartyCard({
             <Hourglass aria-hidden="true" /> Request pending
           </Badge>
         ) : myStatus === "creator" ? (
-          <Badge variant="secondary">Your plan</Badge>
+          <Badge variant="secondary">Your party</Badge>
         ) : null}
         {past ? (
           <Badge variant="outline" className="gap-1">

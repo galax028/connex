@@ -113,7 +113,7 @@ export default function HomePage({
         <title>CONNEX · Find your crew</title>
         <meta
           name="description"
-          content="Turn “I would go if I had someone to go with” into a real plan."
+          content="Turn “I would go if I had someone to go with” into a real party."
         />
       </Head>
 
@@ -131,7 +131,7 @@ export default function HomePage({
           className="flex h-11 items-center gap-2.5 rounded-xl border border-input bg-background px-3.5 text-sm text-muted-foreground transition-colors outline-none hover:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 lg:max-w-md"
         >
           <Search aria-hidden="true" className="size-4" />
-          Search activities or describe your plan…
+          Search activities or describe your party…
         </Link>
 
         <div className="flex flex-col gap-8 lg:grid lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start lg:gap-10">
@@ -194,7 +194,7 @@ export default function HomePage({
                   actions={
                     <Button render={<Link href="/create" />}>
                       <Plus data-icon="inline-start" aria-hidden="true" />
-                      Start a plan
+                      Start a party
                     </Button>
                   }
                 />
@@ -238,14 +238,14 @@ export default function HomePage({
                 id="create-cta-heading"
                 className="font-heading heading-3 font-semibold text-primary"
               >
-                Nobody planning it yet?
+                No party for it yet?
               </h2>
               <p className="text-sm text-foreground/80">
-                Post your own plan — badminton, study group, food run — and let people find you.
+                Post your own party — badminton, study group, food run — and let people find you.
               </p>
               <Button className="mt-1 self-start" render={<Link href="/create" />}>
                 <Plus data-icon="inline-start" aria-hidden="true" />
-                Start a plan
+                Start a party
               </Button>
             </section>
           </div>

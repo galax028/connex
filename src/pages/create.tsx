@@ -150,7 +150,8 @@ type FormErrors = Partial<Record<keyof FormState, string>>;
 
 function validate(form: FormState): FormErrors {
   const errors: FormErrors = {};
-  if (form.title.trim().length < 3) errors.title = "Give the plan a title (at least 3 characters).";
+  if (form.title.trim().length < 3)
+    errors.title = "Give the party a title (at least 3 characters).";
   if (!form.category) errors.category = "Pick a category so people can find it.";
   if (!form.date) errors.date = "Pick a date.";
   if (!form.time) errors.time = "Pick a start time.";
@@ -158,7 +159,7 @@ function validate(form: FormState): FormErrors {
     const when = new Date(toBangkokIso(form.date, form.time)).getTime();
     if (Number.isNaN(when)) errors.date = "That date/time doesn't look valid.";
     else if (when < Date.now() - 60_000)
-      errors.date = "Pick a time in the future — this plan should still happen.";
+      errors.date = "Pick a time in the future — this party should still happen.";
   }
   const location =
     form.locationPreset === MEETING_OTHER ? form.location.trim() : form.locationPreset;
@@ -309,7 +310,7 @@ export default function CreatePartyPage({
       }
 
       if (result.error || !result.data) {
-        setSummaryError("Could not publish the plan. Try again.");
+        setSummaryError("Could not publish the party. Try again.");
         return;
       }
       const partyId: string = result.data.id;
@@ -322,7 +323,7 @@ export default function CreatePartyPage({
       });
       if (joinError) {
         setSummaryError(
-          "The plan was published but joining it failed — try again from the plan page.",
+          "The party was published but joining it failed — try again from the party page.",
         );
       }
 
@@ -373,7 +374,7 @@ export default function CreatePartyPage({
   const previewParty: PartySummary = React.useMemo(
     () => ({
       id: "preview",
-      title: form.title.trim() || "Your plan title",
+      title: form.title.trim() || "Your party title",
       description: form.description.trim(),
       categoryId: categories.find((c) => c.name === form.category)?.id ?? null,
       categoryName: form.category || null,
@@ -416,18 +417,18 @@ export default function CreatePartyPage({
   return (
     <>
       <Head>
-        <title>Start a plan · CONNEX</title>
+        <title>Start a party · CONNEX</title>
       </Head>
       <div className="flex flex-col gap-5">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon-sm" aria-label="Go back" onClick={() => router.back()}>
             <ArrowLeft aria-hidden="true" />
           </Button>
-          <span className="text-sm text-muted-foreground">Start a plan</span>
+          <span className="text-sm text-muted-foreground">Start a party</span>
         </div>
 
         <header className="flex flex-col gap-1">
-          <h1 className="font-heading heading-1 font-semibold tracking-tight">Start a plan</h1>
+          <h1 className="font-heading heading-1 font-semibold tracking-tight">Start a party</h1>
           <p className="text-sm text-muted-foreground">
             Post what you want to do — the crew finds you.
           </p>
@@ -446,7 +447,7 @@ export default function CreatePartyPage({
                 <CardTitle>The basics</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-5 pt-0">
-                <Field label="Plan title" error={errors.title} id="field-title">
+                <Field label="Party title" error={errors.title} id="field-title">
                   <Input
                     id="field-title"
                     value={form.title}
@@ -489,7 +490,7 @@ export default function CreatePartyPage({
                     id="field-description"
                     value={form.description}
                     onChange={(e) => set("description", e.target.value)}
-                    placeholder="What's the plan? Skill level, what to bring, สำหรับมือใหม่ก็มาได้…"
+                    placeholder="What's the party about? Skill level, what to bring, สำหรับมือใหม่ก็มาได้…"
                     rows={4}
                     maxLength={500}
                     className="h-32"
@@ -713,7 +714,7 @@ export default function CreatePartyPage({
               </CardHeader>
               <CardContent className="flex flex-col gap-2 pt-0">
                 <p className="text-sm text-muted-foreground">
-                  Help people find this plan through matching — pick what fits, or add your own.
+                  Help people find this party through matching — pick what fits, or add your own.
                 </p>
                 <div className="flex flex-wrap gap-1.5" role="group" aria-label="Interests">
                   {[...tags, ...customInterests.map((name) => ({ id: name, name }))].map((tag) => {

@@ -183,7 +183,7 @@ activity request. Require user review before publishing.
 
 Design mobile-first for quick campus use.
 
-- Prefer "Find a crew" and "Start a plan" over vague labels.
+- Prefer "Find a crew" and "Start a party" over vague labels.
 - Make cost, time, approximate area, capacity, and participation expectations
   easy to scan.
 - Distinguish requesting to join from being accepted or confirmed.

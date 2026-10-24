@@ -306,7 +306,7 @@ export default function MyProfilePage({
                     ) : me.biography ? (
                       <p className="text-sm text-foreground/90">{me.biography}</p>
                     ) : (
-                      <p className="text-sm italic text-muted-foreground/80">
+                      <p className="text-sm text-muted-foreground/80 italic">
                         No bio yet — edit your profile to introduce yourself.
                       </p>
                     )}
@@ -455,11 +455,11 @@ export default function MyProfilePage({
               ) : (
                 <EmptyState
                   title="No parties yet"
-                  body="Join something or start your own plan."
+                  body="Join something or start your own party."
                   actions={
                     <Button render={<Link href="/create" />}>
                       <Plus data-icon="inline-start" aria-hidden="true" />
-                      Start a plan
+                      Start a party
                     </Button>
                   }
                 />

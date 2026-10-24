@@ -76,7 +76,7 @@ export function DiscoverEmptyState({
     <EmptyState
       icon={<Compass className="size-8" strokeWidth={1.5} />}
       title="No activities match these filters"
-      body="Try widening a filter — or start your own plan and let people find you."
+      body="Try widening a filter — or start your own party and let people find you."
       actions={
         <div className="flex flex-col items-center gap-2">
           <div className="flex flex-wrap justify-center gap-1.5">
@@ -96,7 +96,7 @@ export function DiscoverEmptyState({
               </Button>
             ))}
           </div>
-          <Button render={<Link href={draftHref} />}>Draft a plan</Button>
+          <Button render={<Link href={draftHref} />}>Draft a party</Button>
         </div>
       }
     />

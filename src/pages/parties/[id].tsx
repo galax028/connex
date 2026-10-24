@@ -103,7 +103,7 @@ export default function PartyDetailsPage({
     return (
       <EmptyState
         title="Party not found"
-        body="This plan may have been removed, or the link is from another account."
+        body="This party may have been removed, or the link is from another account."
         actions={
           <Button variant="outline" render={<Link href="/" />}>
             <ArrowLeft data-icon="inline-start" aria-hidden="true" />
@@ -121,7 +121,7 @@ export default function PartyDetailsPage({
 const JOIN_COPY = {
   full: {
     title: "Party is full",
-    body: "All spots are taken. Browse other activities — new plans are posted all the time.",
+    body: "All spots are taken. Browse other activities — new parties are posted all the time.",
   },
   past: {
     title: "This activity already happened",
@@ -323,7 +323,7 @@ function PartyDetailsView({
     try {
       const { error } = await supabase.from("parties").delete().eq("id", party.id);
       if (error) {
-        setJoinError("Could not delete the plan. Try again.");
+        setJoinError("Could not delete the party. Try again.");
         setConfirmDelete(false);
         return;
       }
@@ -350,7 +350,7 @@ function PartyDetailsView({
           <span className="text-sm text-muted-foreground">Party details</span>
           <ShareButtons
             title={party.title}
-            text={`Check out this plan on CONNEX: ${party.title}`}
+            text={`Check out this party on CONNEX: ${party.title}`}
             className="ml-auto"
           />
         </div>
@@ -533,7 +533,7 @@ function PartyDetailsView({
                 onClick={() => setConfirmDelete(true)}
               >
                 <Trash2 data-icon="inline-start" aria-hidden="true" />
-                Delete this plan
+                Delete this party
               </Button>
             ) : null}
           </div>
@@ -581,15 +581,15 @@ function PartyDetailsView({
         <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Delete this plan?</DialogTitle>
+              <DialogTitle>Delete this party?</DialogTitle>
               <DialogDescription>
-                This permanently removes the plan for everyone — members lose their spot.
+                This permanently removes the party for everyone — members lose their spot.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
               <DialogClose render={<Button variant="outline" />}>Keep it</DialogClose>
               <Button variant="destructive" disabled={busy} onClick={() => void onDelete()}>
-                Delete plan
+                Delete party
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -602,9 +602,9 @@ function PartyDetailsView({
           >
             <CircleCheck aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-emerald-600" />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <p className="text-sm font-medium">Plan created</p>
+              <p className="text-sm font-medium">Party created</p>
               <p className="text-xs text-muted-foreground">
-                Your plan is live — people can find it in Discover and Search.
+                Your party is live — people can find it in Discover and Search.
               </p>
             </div>
             <button
@@ -749,7 +749,7 @@ function JoinPanel({
         {status === "creator" ? (
           <>
             <p className="text-sm text-muted-foreground">
-              You’re hosting this plan. Manage join requests under ’crew’ section and coordinate in
+              You’re hosting this party. Manage join requests under ’crew’ section and coordinate in
               the chat.
             </p>
             <div className="flex flex-wrap gap-2">

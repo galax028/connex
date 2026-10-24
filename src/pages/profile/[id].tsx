@@ -180,7 +180,7 @@ export default function StudentProfilePage({
                 </p>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  No shared interests yet — their plans might still be a fit.
+                  No shared interests yet — their parties might still be a fit.
                 </p>
               )}
             </section>
@@ -190,12 +190,12 @@ export default function StudentProfilePage({
             <ProfilePartyList
               title={`Hosting (${organised.length})`}
               parties={organised}
-              emptyText={`${profile.name} hasn't started a plan yet.`}
+              emptyText={`${profile.name} hasn't started a party yet.`}
             />
             <ProfilePartyList
               title={`Joining (${joining.length})`}
               parties={joining}
-              emptyText={`${profile.name} hasn't joined any plans yet.`}
+              emptyText={`${profile.name} hasn't joined any parties yet.`}
             />
 
             {past.length > 0 ? (

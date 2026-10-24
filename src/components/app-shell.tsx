@@ -73,7 +73,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
         <Button size="lg" className="mt-auto" render={<Link href="/create" />}>
           <Plus data-icon="inline-start" aria-hidden="true" />
-          Start a plan
+          Start a party
         </Button>
       </aside>
 

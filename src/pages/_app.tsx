@@ -2,6 +2,7 @@ import type { AppProps } from "next/app";
 import { Inter, Lora, Ubuntu_Mono } from "next/font/google";
 import { useRouter } from "next/router";
 import { AppShell } from "@/components/app-shell";
+import { RouteLoadingBar } from "@/components/route-loading-bar";
 import "@/styles/globals.css";
 
 const fontSans = Inter({
@@ -30,6 +31,17 @@ export default function App({ Component, pageProps }: AppProps) {
       {...pageProps}
     />
   );
-  if (PAGE_SHELL_EXEMPT.has(router.pathname)) return component;
-  return <AppShell>{component}</AppShell>;
+  if (PAGE_SHELL_EXEMPT.has(router.pathname))
+    return (
+      <>
+        <RouteLoadingBar />
+        {component}
+      </>
+    );
+  return (
+    <>
+      <RouteLoadingBar />
+      <AppShell>{component}</AppShell>
+    </>
+  );
 }
