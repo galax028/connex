@@ -179,7 +179,7 @@ body::before {
     100% 100%;
   background-position:
     0 0,
-    6px 6px,
+    12px 12px,
     0 0;
   mask-image: linear-gradient(to bottom, black 0%, black 45%, transparent 100%);
 }

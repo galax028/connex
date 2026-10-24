@@ -50,7 +50,7 @@ export function PartyCard({
         "relative gap-2.5 transition-shadow focus-within:ring-3 focus-within:ring-ring/50",
         !nonInteractive && "hover:shadow-md",
         past && "opacity-70",
-        tone === "primary" && "bg-primary/5 ring-primary/30",
+        tone === "primary" && "ring-primary/30",
         className,
       )}
     >
